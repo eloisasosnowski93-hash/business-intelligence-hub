@@ -137,10 +137,10 @@ Deno.serve(async (req) => {
       if (!data) {
         const res = await fetch(`${BRASIL_API_BASE}/cnpj/v1/${clean}`);
         if (!res.ok) {
-          const err = await res.text();
+          console.error('BrasilAPI CNPJ error', res.status, await res.text());
           return new Response(
-            JSON.stringify({ error: `BrasilAPI error: ${res.status}`, details: err }),
-            { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: 'Falha ao consultar CNPJ. Tente novamente.' }),
+            { status: 502, headers: jsonHeaders }
           );
         }
         data = await res.json();
