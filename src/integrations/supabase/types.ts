@@ -14,7 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      leads: {
+        Row: {
+          categoria: string
+          cliente_tipo: string | null
+          contato_cargo: string | null
+          contato_email: string | null
+          contato_nome: string | null
+          contato_telefone: string | null
+          created_at: string
+          data_criacao_original: string | null
+          empresa: string
+          estado_negocio: string | null
+          etapa: string | null
+          funil: string | null
+          id: string
+          motivo_perda: string | null
+          nacionalidade: string | null
+          nome_negocio: string | null
+          origem_lead: string | null
+          produtos: string | null
+          qualificacao: number | null
+          responsavel: string | null
+          responsavel_csv: string | null
+          sdr: string | null
+          tipo_proposta: string | null
+          valor_recorrente: number | null
+          valor_unico: number | null
+        }
+        Insert: {
+          categoria: string
+          cliente_tipo?: string | null
+          contato_cargo?: string | null
+          contato_email?: string | null
+          contato_nome?: string | null
+          contato_telefone?: string | null
+          created_at?: string
+          data_criacao_original?: string | null
+          empresa: string
+          estado_negocio?: string | null
+          etapa?: string | null
+          funil?: string | null
+          id?: string
+          motivo_perda?: string | null
+          nacionalidade?: string | null
+          nome_negocio?: string | null
+          origem_lead?: string | null
+          produtos?: string | null
+          qualificacao?: number | null
+          responsavel?: string | null
+          responsavel_csv?: string | null
+          sdr?: string | null
+          tipo_proposta?: string | null
+          valor_recorrente?: number | null
+          valor_unico?: number | null
+        }
+        Update: {
+          categoria?: string
+          cliente_tipo?: string | null
+          contato_cargo?: string | null
+          contato_email?: string | null
+          contato_nome?: string | null
+          contato_telefone?: string | null
+          created_at?: string
+          data_criacao_original?: string | null
+          empresa?: string
+          estado_negocio?: string | null
+          etapa?: string | null
+          funil?: string | null
+          id?: string
+          motivo_perda?: string | null
+          nacionalidade?: string | null
+          nome_negocio?: string | null
+          origem_lead?: string | null
+          produtos?: string | null
+          qualificacao?: number | null
+          responsavel?: string | null
+          responsavel_csv?: string | null
+          sdr?: string | null
+          tipo_proposta?: string | null
+          valor_recorrente?: number | null
+          valor_unico?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -7,6 +7,11 @@ import { UnitProvider } from "@/contexts/UnitContext";
 import { AppLayout } from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Prospeccao from "@/pages/Prospeccao";
+import CrmLeads from "@/pages/CrmLeads";
+import Endotoxina from "@/pages/Endotoxina";
+import Enriquecimento from "@/pages/Enriquecimento";
+import Relatorios from "@/pages/Relatorios";
+import Certificacao from "@/pages/Certificacao";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -22,6 +27,11 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/prospeccao" element={<Prospeccao />} />
+              <Route path="/crm" element={<CrmLeads />} />
+              <Route path="/endotoxina" element={<Endotoxina />} />
+              <Route path="/enriquecimento" element={<Enriquecimento />} />
+              <Route path="/relatorios" element={<Relatorios />} />
+              <Route path="/certificacao" element={<Certificacao />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>
