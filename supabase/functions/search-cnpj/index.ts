@@ -1,11 +1,7 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
-
-const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
 const BRASIL_API_BASE = "https://brasilapi.com.br/api";
 
@@ -28,46 +24,28 @@ function scoreLead(
 ): { score: number; urgency: string; reasons: string[] } {
   let score = 0;
   const reasons: string[] = [];
-  const cnaeDesc = String(
-    company.cnae_fiscal_descricao || ""
-  ).toLowerCase();
+  const cnaeDesc = String(company.cnae_fiscal_descricao || "").toLowerCase();
   const cnaes = (company.cnaes_secundarios as Array<{ descricao: string }>) || [];
   const allCnaes = [cnaeDesc, ...cnaes.map((c) => String(c.descricao || "").toLowerCase())];
 
-  // Keywords by unit
   const labKeywords = [
-    "produto para saude",
-    "produtos para saude",
-    "equipamento medico",
-    "implante",
-    "protese",
-    "dispositivo medico",
-    "material hospitalar",
-    "esteriliza",
-    "endotoxina",
-    "laboratorio",
-    "ensaio",
+    "produto para saude", "produtos para saude", "equipamento medico",
+    "implante", "protese", "dispositivo medico", "material hospitalar",
+    "esteriliza", "endotoxina", "laboratorio", "ensaio",
   ];
   const ocpKeywords = [
-    "certificacao",
-    "automotivo",
-    "colchao",
-    "colchoes",
-    "movel",
-    "moveis",
-    "brinquedo",
-    "eletrodomestico",
-    "eletronico",
+    "certificacao", "automotivo", "colchao", "colchoes",
+    "movel", "moveis", "brinquedo", "eletrodomestico", "eletronico",
   ];
   const keywords = unit === "lab" ? labKeywords : ocpKeywords;
 
-  // Portaria matching
   const portariaKeywords: Record<string, string[]> = {
-    "145/2022": ["saude", "medic", "implante", "protese", "hospitalar"],
-    "384/2020": ["automotivo", "colch", "movel", "brinquedo", "eletro"],
+    "145/2022": ["automotivo", "componente", "veicular", "automovel", "autopeca"],
+    "384/2020": ["saude", "medic", "implante", "protese", "hospitalar", "vigilancia"],
+    "endotoxina": ["esteriliza", "endotoxina", "bioburden", "saude", "medic"],
+    "mri_iso10993": ["mri", "ressonancia", "biocompatibilidade", "implante"],
   };
 
-  // CNAE match
   for (const kw of keywords) {
     if (allCnaes.some((c) => c.includes(kw))) {
       score += 5;
@@ -76,7 +54,6 @@ function scoreLead(
     }
   }
 
-  // Portaria match in nome/atividade
   const nome = String(company.razao_social || "").toLowerCase();
   const pKws = portariaKeywords[portaria] || [];
   for (const kw of pKws) {
@@ -87,15 +64,12 @@ function scoreLead(
     }
   }
 
-  // Active company bonus
   if (company.situacao_cadastral === 2) {
     score += 1;
     reasons.push("Empresa ativa");
   }
 
-  const urgency =
-    score >= 8 ? "hot" : score >= 5 ? "medio" : score >= 3 ? "normal" : "frio";
-
+  const urgency = score >= 8 ? "hot" : score >= 5 ? "medio" : score >= 3 ? "normal" : "frio";
   return { score: Math.min(score, 10), urgency, reasons };
 }
 
@@ -105,23 +79,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Authenticate user
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: jsonHeaders });
-    }
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_ANON_KEY')!
-    );
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(authHeader.replace('Bearer ', ''));
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: jsonHeaders });
-    }
-
     const { cnpj, cnae, portaria, unit } = await req.json();
 
-    // Search by CNPJ
     if (cnpj) {
       const clean = cnpj.replace(/\D/g, "");
       if (clean.length !== 14) {
@@ -137,10 +96,11 @@ Deno.serve(async (req) => {
       if (!data) {
         const res = await fetch(`${BRASIL_API_BASE}/cnpj/v1/${clean}`);
         if (!res.ok) {
-          console.error('BrasilAPI CNPJ error', res.status, await res.text());
+          const errText = await res.text();
+          console.error("BrasilAPI CNPJ error", res.status, errText);
           return new Response(
-            JSON.stringify({ error: 'Falha ao consultar CNPJ. Tente novamente.' }),
-            { status: 502, headers: jsonHeaders }
+            JSON.stringify({ error: "Falha ao consultar CNPJ. Tente novamente." }),
+            { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
         data = await res.json();
@@ -155,7 +115,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Search by CNAE code
     if (cnae) {
       const cacheKey = `cnae:${cnae}`;
       let data = getCached(cacheKey);
@@ -163,6 +122,8 @@ Deno.serve(async (req) => {
       if (!data) {
         const res = await fetch(`${BRASIL_API_BASE}/cnae/v1/${cnae}`);
         if (!res.ok) {
+          const errText = await res.text();
+          console.error("BrasilAPI CNAE error", res.status, errText);
           return new Response(
             JSON.stringify({ error: `CNAE não encontrado: ${cnae}` }),
             { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -183,10 +144,10 @@ Deno.serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error('search-cnpj error:', error);
+    console.error("search-cnpj error:", error);
     return new Response(
-      JSON.stringify({ error: 'Erro interno. Tente novamente.' }),
-      { status: 500, headers: jsonHeaders }
+      JSON.stringify({ error: "Erro interno. Tente novamente." }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
