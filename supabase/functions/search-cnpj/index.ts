@@ -1,7 +1,11 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+const jsonHeaders = { ...corsHeaders, 'Content-Type': 'application/json' };
 
 const BRASIL_API_BASE = "https://brasilapi.com.br/api";
 
@@ -101,6 +105,20 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Authenticate user
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: jsonHeaders });
+    }
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!
+    );
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(authHeader.replace('Bearer ', ''));
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: 'Não autorizado' }), { status: 401, headers: jsonHeaders });
+    }
+
     const { cnpj, cnae, portaria, unit } = await req.json();
 
     // Search by CNPJ
@@ -119,10 +137,10 @@ Deno.serve(async (req) => {
       if (!data) {
         const res = await fetch(`${BRASIL_API_BASE}/cnpj/v1/${clean}`);
         if (!res.ok) {
-          const err = await res.text();
+          console.error('BrasilAPI CNPJ error', res.status, await res.text());
           return new Response(
-            JSON.stringify({ error: `BrasilAPI error: ${res.status}`, details: err }),
-            { status: res.status, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            JSON.stringify({ error: 'Falha ao consultar CNPJ. Tente novamente.' }),
+            { status: 502, headers: jsonHeaders }
           );
         }
         data = await res.json();
@@ -165,10 +183,10 @@ Deno.serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unknown error";
+    console.error('search-cnpj error:', error);
     return new Response(
-      JSON.stringify({ error: msg }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: 'Erro interno. Tente novamente.' }),
+      { status: 500, headers: jsonHeaders }
     );
   }
 });
