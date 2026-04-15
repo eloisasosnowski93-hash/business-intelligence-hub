@@ -29,11 +29,12 @@ export interface Lead {
   created_at: string;
 }
 
+// FIXED: Correct portaria descriptions — 145/2022 = Componentes Automotivos, 384/2020 = Vigilância Sanitária
 export const CATEGORIA_LABELS: Record<string, string> = {
-  portaria_145_2022: "Portaria 145/2022 — Automotivo",
-  endotoxina_esterilidade: "Endotoxina & Esterilidade",
-  mri_iso10993: "MRI & ISO 10993/18",
-  portaria_384_2020: "Portaria 384/2020 — Vigilância Sanitária",
+  portaria_145_2022: "Portaria 145/2022 — Componentes Automotivos",
+  endotoxina_esterilidade: "Endotoxina & Esterilidade — Bioburden",
+  mri_iso10993: "MRI & ISO 10993/18 — Biocompatibilidade",
+  portaria_384_2020: "Portaria 384/2020 — Equip. Vigilância Sanitária",
 };
 
 export const CATEGORIA_RESPONSAVEL: Record<string, string> = {
@@ -41,6 +42,14 @@ export const CATEGORIA_RESPONSAVEL: Record<string, string> = {
   endotoxina_esterilidade: "Kevin",
   mri_iso10993: "Ana Beatriz",
   portaria_384_2020: "Ana Carolina",
+};
+
+// Map portaria selector values to categoria DB keys
+export const PORTARIA_TO_CATEGORIA: Record<string, string> = {
+  "145/2022": "portaria_145_2022",
+  "384/2020": "portaria_384_2020",
+  "endotoxina": "endotoxina_esterilidade",
+  "mri_iso10993": "mri_iso10993",
 };
 
 export function useLeads(categoria?: string) {
@@ -59,6 +68,27 @@ export function useLeads(categoria?: string) {
   });
 }
 
+// Search internal leads by text + optional categoria filter
+export function useSearchLeads(searchText: string, categoria?: string) {
+  return useQuery({
+    queryKey: ["search-leads", searchText, categoria],
+    queryFn: async () => {
+      let query = supabase.from("leads").select("*");
+      if (categoria) {
+        query = query.eq("categoria", categoria);
+      }
+      if (searchText) {
+        query = query.or(`empresa.ilike.%${searchText}%,contato_nome.ilike.%${searchText}%,produtos.ilike.%${searchText}%,nome_negocio.ilike.%${searchText}%`);
+      }
+      const { data, error } = await query.order("created_at", { ascending: false }).limit(100);
+      if (error) throw error;
+      return (data || []) as Lead[];
+    },
+    enabled: searchText.length >= 2 || !!categoria,
+    staleTime: 1000 * 60 * 2,
+  });
+}
+
 export function useLeadStats() {
   return useQuery({
     queryKey: ["lead-stats"],
@@ -66,7 +96,7 @@ export function useLeadStats() {
       const { data, error } = await supabase.from("leads").select("categoria, estado_negocio, etapa, motivo_perda, valor_unico, valor_recorrente");
       if (error) throw error;
       const leads = data || [];
-      
+
       const byCategoria: Record<string, number> = {};
       const byEstado: Record<string, number> = {};
       const byEtapa: Record<string, number> = {};
