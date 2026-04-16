@@ -143,7 +143,8 @@ export default function Prospeccao() {
   const cnaeQuery = useQuery({
     queryKey: ["brasilapi-cnae", trigger],
     queryFn: async () => {
-      const res = await fetch(`https://brasilapi.com.br/api/cnae/v2/${trigger!.value}`);
+      const cleanCode = trigger!.value.replace(/\D/g, "");
+      const res = await fetch(`https://brasilapi.com.br/api/cnae/v2/${cleanCode}`);
       if (!res.ok) throw new Error("CNAE não encontrado");
       return res.json();
     },
