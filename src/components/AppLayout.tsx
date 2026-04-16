@@ -1,28 +1,23 @@
+import { useUnit } from "@/contexts/UnitContext";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
-import { useUnit } from "@/contexts/UnitContext";
-import { ReactNode } from "react";
 
-export function AppLayout({ children }: { children: ReactNode }) {
-  const { unitLabel } = useUnit();
+export function AppLayout({ children }: { children: React.ReactNode }) {
+  const { unit } = useUnit();
 
   return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+    <div data-unit={unit} className="min-h-screen bg-background">
+      <SidebarProvider>
         <AppSidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center border-b border-border bg-card px-4 gap-3">
-            <SidebarTrigger className="shrink-0" />
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span className="text-sm font-medium text-foreground">{unitLabel}</span>
-            </div>
-          </header>
-          <main className="flex-1 p-4 md:p-6 overflow-auto">
+        <main className="flex-1 flex flex-col min-w-0">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-10">
+            <SidebarTrigger className="h-7 w-7" />
+          </div>
+          <div className="flex-1 p-6 max-w-7xl mx-auto w-full">
             {children}
-          </main>
-        </div>
-      </div>
-    </SidebarProvider>
+          </div>
+        </main>
+      </SidebarProvider>
+    </div>
   );
 }

@@ -1,166 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Dynamic unit theming - defaults to Lab (Bordô) */
-    --brand-primary-h: 0;
-    --brand-primary-s: 100%;
-    --brand-primary-l: 20%;
-    
     --background: 0 0% 98%;
-    --foreground: 230 25% 10%;
-
+    --foreground: 224 15% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 230 25% 10%;
-
+    --card-foreground: 224 15% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 230 25% 10%;
-
-    --primary: var(--brand-primary-h) var(--brand-primary-s) var(--brand-primary-l);
+    --popover-foreground: 224 15% 12%;
+    --primary: 346 85% 30%;
     --primary-foreground: 0 0% 100%;
-
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 230 25% 10%;
-
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-
-    --accent: 174 100% 25%;
-    --accent-foreground: 0 0% 100%;
-
+    --secondary: 346 20% 94%;
+    --secondary-foreground: 346 85% 25%;
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 346 20% 92%;
+    --accent-foreground: 346 85% 25%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: var(--brand-primary-h) var(--brand-primary-s) var(--brand-primary-l);
-
-    --radius: 0.75rem;
-
-    --sidebar-background: 230 25% 8%;
-    --sidebar-foreground: 220 14% 96%;
-    --sidebar-primary: 0 0% 100%;
-    --sidebar-primary-foreground: 230 25% 8%;
-    --sidebar-accent: 230 20% 14%;
-    --sidebar-accent-foreground: 220 14% 96%;
-    --sidebar-border: 230 20% 16%;
-    --sidebar-ring: 174 100% 25%;
-
-    /* Semantic tokens */
-    --success: 152 69% 31%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --hot: 0 84% 60%;
-    --hot-foreground: 0 0% 100%;
-
-    /* Bento grid */
-    --bento-gap: 1rem;
-    --bento-radius: 1rem;
-
-    /* Fonts */
-    --font-heading: 'Urbanist', sans-serif;
-    --font-body: 'Epilogue', sans-serif;
+    --border: 220 13% 90%;
+    --input: 220 13% 90%;
+    --ring: 346 85% 30%;
+    --radius: 0.625rem;
+    --sidebar-background: 346 40% 14%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 346 85% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 346 30% 20%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 346 30% 20%;
+    --sidebar-ring: 346 85% 60%;
   }
 
-  /* OCP unit theme override */
-  .theme-ocp {
-    --brand-primary-h: 174;
-    --brand-primary-s: 100%;
-    --brand-primary-l: 25%;
+  [data-unit="ocp"] {
+    --primary: 213 80% 35%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 213 30% 92%;
+    --secondary-foreground: 213 80% 25%;
+    --accent: 213 30% 90%;
+    --accent-foreground: 213 80% 25%;
+    --ring: 213 80% 35%;
+    --sidebar-background: 213 50% 14%;
+    --sidebar-primary: 213 80% 60%;
+    --sidebar-accent: 213 40% 20%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 213 40% 20%;
+    --sidebar-ring: 213 80% 60%;
   }
 
-  /* Lab unit theme (default) */
-  .theme-lab {
-    --brand-primary-h: 0;
-    --brand-primary-s: 100%;
-    --brand-primary-l: 20%;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-body);
+    font-family: 'Inter', sans-serif;
   }
-
-  h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-heading);
-    font-weight: 700;
-  }
+  h1, h2, h3, .font-heading { font-family: 'Plus Jakarta Sans', sans-serif; }
 }
 
 @layer components {
   .bento-card {
-    @apply rounded-xl bg-card border border-border p-5 shadow-sm transition-all duration-200;
-  }
-  .bento-card:hover {
-    @apply shadow-md;
-    transform: translateY(-1px);
+    @apply bg-card rounded-xl border border-border p-5 shadow-sm;
   }
   .bento-card-accent {
-    @apply bento-card border-l-4;
-    border-left-color: hsl(var(--primary));
-  }
-
-  .stat-value {
-    font-family: var(--font-heading);
-    @apply text-2xl font-bold tracking-tight;
-  }
-
-  .urgency-hot {
-    @apply bg-red-100 text-red-700 border-red-200;
-  }
-  .urgency-vencido {
-    @apply bg-amber-100 text-amber-700 border-amber-200;
-  }
-  .urgency-medio {
-    @apply bg-yellow-100 text-yellow-700 border-yellow-200;
-  }
-  .urgency-normal {
-    @apply bg-emerald-100 text-emerald-700 border-emerald-200;
-  }
-
-  .lead-score-hot {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700;
-  }
-  .lead-score-warm {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700;
-  }
-  .lead-score-cold {
-    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600;
+    @apply bg-accent/40 rounded-xl border border-border p-5;
   }
 }
 
 @layer utilities {
-  .animate-fade-in {
-    animation: fadeIn 0.3s ease-out;
-  }
-  .animate-slide-up {
-    animation: slideUp 0.4s ease-out;
-  }
-  .animate-count-up {
-    animation: countUp 0.6s ease-out;
-  }
+  .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+  .animate-slide-up { animation: slideUp 0.3s ease-out; }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes countUp {
-  from { opacity: 0; transform: scale(0.8); }
-  to { opacity: 1; transform: scale(1); }
 }
