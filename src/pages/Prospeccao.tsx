@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { UrgencyBadge, LeadScoreBadge } from "@/components/Badges";
-import { Search, Loader2, Building2, MapPin, FileText, AlertCircle, Database, Globe } from "lucide-react";
+import { Search, Loader2, Building2, MapPin, FileText, AlertCircle, Database, Globe, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -19,16 +19,7 @@ function computeScoring(company: any, portaria: string) {
   if (company.situacao_cadastral === 2) { score += 20; reasons.push("Empresa ativa"); }
   if (company.email) { score += 10; reasons.push("E-mail disponível"); }
   if (company.telefone_1) { score += 10; reasons.push("Telefone disponível"); }
-  if (portaria === "145/2022") {
-    if (allCnaes.some(c => ["2910","2920","2930","2941","2942","2949","4511","4530"].some(a => c.startsWith(a)))) {
-      score += 40; reasons.push("CNAE automotivo — elegível Portaria 145/2022");
-    }
-  }
-  if (portaria === "384/2020") {
-    if (allCnaes.some(c => ["3250","2660","3841","3842","2651","2652"].some(a => c.startsWith(a)))) {
-      score += 40; reasons.push("CNAE equip. médico/sanitário — elegível Portaria 384/2020");
-    }
-  }
+  if (company.qsa?.length > 0) { score += 10; reasons.push("Decisores identificados"); }
   if (portaria === "endotoxina") {
     if (allCnaes.some(c => ["2110","2121","2122","2123","2130","3250"].some(a => c.startsWith(a)))) {
       score += 40; reasons.push("CNAE farmacêutico — demanda ensaios endotoxina");
@@ -39,20 +30,33 @@ function computeScoring(company: any, portaria: string) {
       score += 40; reasons.push("CNAE dispositivos médicos — elegível ISO 10993");
     }
   }
+  if (portaria === "384/2020") {
+    if (allCnaes.some(c => ["3250","2660","3841","3842","2651","2652"].some(a => c.startsWith(a)))) {
+      score += 40; reasons.push("CNAE equip. médico/sanitário — elegível Portaria 384/2020");
+    }
+  }
+  if (portaria === "145/2022") {
+    if (allCnaes.some(c => ["2910","2920","2930","2941","2942","2949","4511","4530"].some(a => c.startsWith(a)))) {
+      score += 40; reasons.push("CNAE automotivo — elegível Portaria 145/2022");
+    }
+  }
   return { score, urgency: score >= 60 ? "alta" : score >= 30 ? "media" : "baixa", reasons };
 }
 
+// LAB: apenas Endotoxina e MRI — SEM Portaria 145/2022 e SEM Eloisa
 const PORTARIAS_LAB = [
-  { value: "145/2022", label: "Portaria 145/2022 — Automotivo (Eloisa)" },
   { value: "endotoxina", label: "Endotoxina & Esterilidade (Kevin)" },
   { value: "mri_iso10993", label: "MRI & ISO 10993/18 (Ana Beatriz)" },
 ];
+
+// OCP: todas as portarias
 const PORTARIAS_OCP = [
-  { value: "384/2020", label: "Portaria 384/2020 — Vigilância Sanitária (Ana Carolina)" },
   { value: "145/2022", label: "Portaria 145/2022 — Automotivo (Eloisa)" },
+  { value: "384/2020", label: "Portaria 384/2020 — Vigilância Sanitária (Ana Carolina)" },
   { value: "071/2022", label: "Portaria 071/2022" },
   { value: "501/2021", label: "Portaria 501/2021 — Rodas" },
 ];
+
 const CNAES_LAB = [
   { code: "3250701", label: "3250-7/01 — Instrumentos médico-cirúrgicos" },
   { code: "3250706", label: "3250-7/06 — Material hospitalar" },
@@ -62,6 +66,7 @@ const CNAES_LAB = [
   { code: "2121101", label: "2121-1/01 — Medicamentos uso humano" },
   { code: "3250709", label: "3250-7/09 — Outros equip. médicos" },
 ];
+
 const CNAES_OCP = [
   { code: "2910701", label: "2910-7/01 — Automóveis e utilitários" },
   { code: "2941700", label: "2941-7/00 — Peças sistema motor" },
@@ -76,7 +81,7 @@ export default function Prospeccao() {
   const { unit, unitLabel } = useUnit();
   const [searchTab, setSearchTab] = useState<"interno" | "externo">("interno");
   const [internalSearch, setInternalSearch] = useState("");
-  const [selectedPortaria, setSelectedPortaria] = useState(unit === "lab" ? "145/2022" : "384/2020");
+  const [selectedPortaria, setSelectedPortaria] = useState(unit === "lab" ? "endotoxina" : "145/2022");
   const [searchType, setSearchType] = useState<"cnpj" | "cnae">("cnpj");
   const [cnpjInput, setCnpjInput] = useState("");
   const [selectedCnae, setSelectedCnae] = useState("");
@@ -97,7 +102,12 @@ export default function Prospeccao() {
         throw new Error(err.message || `CNPJ não encontrado (${res.status})`);
       }
       const company = await res.json();
-      return { company, scoring: computeScoring(company, trigger!.portaria) };
+      // Monta contatos a partir do QSA (decisores)
+      const decisores = (company.qsa || []).map((s: any) => ({
+        nome: s.nome_socio,
+        cargo: s.qualificacao_socio,
+      }));
+      return { company, scoring: computeScoring(company, trigger!.portaria), decisores };
     },
     enabled: !!trigger && trigger.type === "cnpj",
     retry: 0,
@@ -107,8 +117,9 @@ export default function Prospeccao() {
   const cnaeQuery = useQuery({
     queryKey: ["brasilapi-cnae", trigger],
     queryFn: async () => {
+      // BrasilAPI CNAE v2 retorna info do CNAE
       const res = await fetch(`https://brasilapi.com.br/api/cnae/v2/${trigger!.value}`);
-      if (!res.ok) throw new Error("CNAE não encontrado na BrasilAPI");
+      if (!res.ok) throw new Error("CNAE não encontrado. Tente buscar por CNPJ diretamente.");
       return res.json();
     },
     enabled: !!trigger && trigger.type === "cnae",
@@ -128,7 +139,7 @@ export default function Prospeccao() {
   };
 
   const isLoading = cnpjQuery.isFetching || cnaeQuery.isFetching;
-  const companyData = cnpjQuery.data;
+  const result = cnpjQuery.data;
 
   const formatCnpj = (v: string) => {
     const d = v.replace(/\D/g, "").slice(0, 14);
@@ -144,7 +155,7 @@ export default function Prospeccao() {
       </div>
 
       <div className="bento-card">
-        <h3 className="text-sm font-heading font-semibold mb-3">📋 Filtrar por Portaria</h3>
+        <h3 className="text-sm font-heading font-semibold mb-3">📋 Filtrar por Portaria / Área</h3>
         <div className="flex flex-wrap gap-2">
           {portarias.map(p => (
             <Button key={p.value} variant={selectedPortaria === p.value ? "default" : "outline"} size="sm"
@@ -189,6 +200,7 @@ export default function Prospeccao() {
                       <TableCell><Badge variant={l.estado_negocio === "Vendida" ? "default" : l.estado_negocio === "Perdida" ? "destructive" : "secondary"} className="text-xs">{l.estado_negocio || "—"}</Badge></TableCell>
                       <TableCell className="text-xs text-muted-foreground">{l.contato_nome || "—"}
                         {l.contato_email && <div className="text-[10px]">{l.contato_email}</div>}
+                        {l.contato_telefone && <div className="text-[10px]">{l.contato_telefone}</div>}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{l.responsavel_csv || l.responsavel || "—"}</TableCell>
                     </TableRow>
@@ -200,7 +212,7 @@ export default function Prospeccao() {
           {internalLeads?.length === 0 && internalSearch.length >= 2 && (
             <div className="bento-card text-center py-8">
               <Search className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Nenhum lead encontrado</p>
+              <p className="text-sm text-muted-foreground">Nenhum lead encontrado na base interna</p>
               <Button variant="outline" size="sm" className="mt-3" onClick={() => setSearchTab("externo")}>
                 <Globe className="h-4 w-4 mr-1" />Buscar via BrasilAPI
               </Button>
@@ -216,13 +228,17 @@ export default function Prospeccao() {
 
         <TabsContent value="externo" className="space-y-4">
           <div className="bento-card">
-            <h3 className="text-sm font-heading font-semibold mb-4">🌐 Busca Externa — BrasilAPI</h3>
+            <h3 className="text-sm font-heading font-semibold mb-2">🌐 Busca Externa — BrasilAPI (Receita Federal)</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              A busca por CNPJ retorna dados cadastrais completos incluindo sócios/decisores.
+              A busca por CNAE retorna a descrição oficial do código — para listar empresas de um setor, importe um CSV com CNPJs na seção CRM.
+            </p>
             <div className="flex gap-2 mb-4">
               <Button variant={searchType === "cnpj" ? "default" : "outline"} size="sm" onClick={() => setSearchType("cnpj")}>
                 <Building2 className="h-4 w-4 mr-1" />Por CNPJ
               </Button>
               <Button variant={searchType === "cnae" ? "default" : "outline"} size="sm" onClick={() => setSearchType("cnae")}>
-                <FileText className="h-4 w-4 mr-1" />Por CNAE
+                <FileText className="h-4 w-4 mr-1" />Por CNAE (descrição)
               </Button>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -263,55 +279,62 @@ export default function Prospeccao() {
 
           {cnaeQuery.data && trigger?.type === "cnae" && (
             <div className="bento-card">
-              <h3 className="text-sm font-heading font-semibold mb-3">📋 CNAE</h3>
+              <h3 className="text-sm font-heading font-semibold mb-3">📋 Informações do CNAE</h3>
               <div className="space-y-2 text-sm">
                 <div><span className="text-muted-foreground">Código:</span> <Badge variant="outline">{cnaeQuery.data.codigo}</Badge></div>
                 <div><span className="text-muted-foreground">Descrição:</span> <span className="font-medium">{cnaeQuery.data.descricao}</span></div>
+                {cnaeQuery.data.observacoes && <div><span className="text-muted-foreground">Observações:</span> <span>{cnaeQuery.data.observacoes}</span></div>}
               </div>
-              <p className="text-xs text-muted-foreground mt-3 p-3 bg-muted rounded-md">
-                💡 Para buscar empresas com este CNAE, importe uma planilha com CNPJs na seção CRM Leads.
-              </p>
+              <div className="mt-3 p-3 bg-muted rounded-md text-xs text-muted-foreground">
+                💡 Para prospectar empresas deste setor, importe uma planilha de CNPJs na seção <strong>CRM Leads</strong>. A BrasilAPI não possui endpoint de busca por setor.
+              </div>
             </div>
           )}
 
-          {companyData && (
+          {result && (
             <div className="space-y-4 animate-slide-up">
               <div className="bento-card-accent">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-heading font-semibold">📊 Lead Scoring</h3>
+                  <h3 className="text-sm font-heading font-semibold">📊 Lead Scoring Automático</h3>
                   <div className="flex gap-2">
-                    <LeadScoreBadge score={companyData.scoring.score} />
-                    <UrgencyBadge urgency={companyData.scoring.urgency} />
+                    <LeadScoreBadge score={result.scoring.score} />
+                    <UrgencyBadge urgency={result.scoring.urgency} />
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {companyData.scoring.reasons.map((r, i) => <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>)}
-                  {!companyData.scoring.reasons.length && <span className="text-xs text-muted-foreground">Nenhum critério atendido</span>}
+                  {result.scoring.reasons.map((r, i) => <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>)}
+                  {!result.scoring.reasons.length && <span className="text-xs text-muted-foreground">Nenhum critério de portaria atendido</span>}
                 </div>
               </div>
+
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="bento-card">
                   <h3 className="text-sm font-heading font-semibold mb-3">🏢 Dados Cadastrais</h3>
                   <div className="space-y-2 text-sm">
-                    <div><span className="text-muted-foreground">Razão Social:</span> <span className="font-medium">{companyData.company.razao_social}</span></div>
-                    {companyData.company.nome_fantasia && <div><span className="text-muted-foreground">Fantasia:</span> <span>{companyData.company.nome_fantasia}</span></div>}
-                    <div><span className="text-muted-foreground">CNPJ:</span> <span className="font-mono">{companyData.company.cnpj}</span></div>
-                    <div><span className="text-muted-foreground">Situação:</span> <Badge variant={companyData.company.situacao_cadastral === 2 ? "default" : "destructive"} className="text-xs">{companyData.company.descricao_situacao_cadastral}</Badge></div>
-                    <div className="flex gap-1"><MapPin className="h-3 w-3 mt-1 text-muted-foreground shrink-0" /><span>{companyData.company.logradouro}, {companyData.company.municipio}/{companyData.company.uf}</span></div>
-                    {companyData.company.email && <div><span className="text-muted-foreground">Email:</span> <span>{companyData.company.email}</span></div>}
-                    {companyData.company.telefone_1 && <div><span className="text-muted-foreground">Tel:</span> <span>{companyData.company.telefone_1}</span></div>}
+                    <div><span className="text-muted-foreground">Razão Social:</span> <span className="font-medium">{result.company.razao_social}</span></div>
+                    {result.company.nome_fantasia && <div><span className="text-muted-foreground">Fantasia:</span> <span>{result.company.nome_fantasia}</span></div>}
+                    <div><span className="text-muted-foreground">CNPJ:</span> <span className="font-mono">{result.company.cnpj}</span></div>
+                    <div><span className="text-muted-foreground">Situação:</span> <Badge variant={result.company.situacao_cadastral === 2 ? "default" : "destructive"} className="text-xs">{result.company.descricao_situacao_cadastral}</Badge></div>
+                    <div className="flex gap-1"><MapPin className="h-3 w-3 mt-1 text-muted-foreground shrink-0" /><span>{result.company.logradouro}, {result.company.municipio}/{result.company.uf}</span></div>
+                    {result.company.email && <div><span className="text-muted-foreground">Email:</span> <a href={`mailto:${result.company.email}`} className="text-primary hover:underline">{result.company.email}</a></div>}
+                    {result.company.ddd_telefone_1 && <div><span className="text-muted-foreground">Tel:</span> <span>({result.company.ddd_telefone_1}) {result.company.telefone_1}</span></div>}
+                    {result.company.porte && <div><span className="text-muted-foreground">Porte:</span> <Badge variant="outline" className="text-xs">{result.company.porte}</Badge></div>}
+                    {result.company.natureza_juridica && <div><span className="text-muted-foreground">Natureza:</span> <span className="text-xs">{result.company.natureza_juridica}</span></div>}
                   </div>
                 </div>
+
                 <div className="bento-card">
                   <h3 className="text-sm font-heading font-semibold mb-3">📋 CNAEs</h3>
                   <div className="space-y-2 text-sm">
-                    <div><span className="text-muted-foreground">Principal:</span> <Badge variant="outline" className="text-xs ml-1">{companyData.company.cnae_fiscal}</Badge>
-                      <p className="mt-1">{companyData.company.cnae_fiscal_descricao}</p>
+                    <div>
+                      <span className="text-muted-foreground">Principal:</span>
+                      <Badge variant="outline" className="text-xs ml-1">{result.company.cnae_fiscal}</Badge>
+                      <p className="mt-1">{result.company.cnae_fiscal_descricao}</p>
                     </div>
-                    {companyData.company.cnaes_secundarios?.length > 0 && (
+                    {result.company.cnaes_secundarios?.length > 0 && (
                       <div><span className="text-muted-foreground block mb-1">Secundários:</span>
                         <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {companyData.company.cnaes_secundarios.slice(0, 10).map((c: any, i: number) => (
+                          {result.company.cnaes_secundarios.slice(0, 10).map((c: any, i: number) => (
                             <div key={i} className="text-xs"><Badge variant="outline" className="text-[10px] mr-1">{c.codigo}</Badge>{c.descricao}</div>
                           ))}
                         </div>
@@ -320,14 +343,35 @@ export default function Prospeccao() {
                   </div>
                 </div>
               </div>
-              {companyData.company.qsa?.length > 0 && (
+
+              {/* DECISORES / QSA */}
+              {result.decisores && result.decisores.length > 0 && (
                 <div className="bento-card">
-                  <h3 className="text-sm font-heading font-semibold mb-3">👥 Quadro Societário</h3>
-                  <Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Qualificação</TableHead></TableRow></TableHeader>
-                    <TableBody>{companyData.company.qsa.map((s: any, i: number) => (
-                      <TableRow key={i}><TableCell className="font-medium">{s.nome_socio}</TableCell><TableCell className="text-muted-foreground">{s.qualificacao_socio}</TableCell></TableRow>
-                    ))}</TableBody>
-                  </Table>
+                  <h3 className="text-sm font-heading font-semibold mb-3 flex items-center gap-2">
+                    <UserCheck className="h-4 w-4 text-primary" /> Decisores / Quadro Societário
+                  </h3>
+                  <div className="space-y-2">
+                    {result.decisores.map((d: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                        <div>
+                          <p className="font-medium text-sm">{d.nome}</p>
+                          <p className="text-xs text-muted-foreground">{d.cargo}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          {result.company.email && (
+                            <a href={`mailto:${result.company.email}`}
+                              className="text-xs text-primary hover:underline flex items-center gap-1">
+                              ✉ E-mail empresa
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-3 p-2 bg-muted/30 rounded">
+                    ℹ️ Contatos pessoais dos sócios não estão disponíveis na Receita Federal.
+                    Use o enriquecimento via LinkedIn ou ferramentas como Apollo.io para e-mails individuais.
+                  </p>
                 </div>
               )}
             </div>
