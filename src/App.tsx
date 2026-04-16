@@ -12,6 +12,7 @@ import Endotoxina from "@/pages/Endotoxina";
 import Enriquecimento from "@/pages/Enriquecimento";
 import Relatorios from "@/pages/Relatorios";
 import Certificacao from "@/pages/Certificacao";
+import Configuracoes from "@/pages/Configuracoes";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
               <Route path="/enriquecimento" element={<Enriquecimento />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/certificacao" element={<Certificacao />} />
+              <Route path="/configuracoes" element={<Configuracoes />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </AppLayout>
