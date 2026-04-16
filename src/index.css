@@ -6,67 +6,59 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98%;
+    --background: 0 0% 97%;
     --foreground: 224 15% 12%;
     --card: 0 0% 100%;
     --card-foreground: 224 15% 12%;
     --popover: 0 0% 100%;
     --popover-foreground: 224 15% 12%;
-    --primary: 346 85% 30%;
+    --primary: 346 90% 25%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 346 20% 94%;
-    --secondary-foreground: 346 85% 25%;
-    --muted: 220 14% 95%;
+    --secondary: 346 15% 93%;
+    --secondary-foreground: 346 90% 20%;
+    --muted: 220 14% 94%;
     --muted-foreground: 220 10% 46%;
-    --accent: 346 20% 92%;
-    --accent-foreground: 346 85% 25%;
+    --accent: 346 15% 90%;
+    --accent-foreground: 346 90% 20%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 90%;
-    --input: 220 13% 90%;
-    --ring: 346 85% 30%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 346 90% 25%;
     --radius: 0.625rem;
-    --sidebar-background: 346 40% 14%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 346 85% 60%;
+    --sidebar-background: 0 0% 96%;
+    --sidebar-foreground: 224 15% 15%;
+    --sidebar-primary: 346 90% 25%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 346 30% 20%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 346 30% 20%;
-    --sidebar-ring: 346 85% 60%;
+    --sidebar-accent: 346 15% 88%;
+    --sidebar-accent-foreground: 346 90% 20%;
+    --sidebar-border: 220 13% 85%;
+    --sidebar-ring: 346 90% 25%;
   }
 
   [data-unit="ocp"] {
-    --primary: 213 80% 35%;
+    --primary: 213 82% 30%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 213 30% 92%;
-    --secondary-foreground: 213 80% 25%;
-    --accent: 213 30% 90%;
-    --accent-foreground: 213 80% 25%;
-    --ring: 213 80% 35%;
-    --sidebar-background: 213 50% 14%;
-    --sidebar-primary: 213 80% 60%;
-    --sidebar-accent: 213 40% 20%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 213 40% 20%;
-    --sidebar-ring: 213 80% 60%;
+    --secondary: 213 25% 91%;
+    --secondary-foreground: 213 82% 20%;
+    --accent: 213 25% 88%;
+    --accent-foreground: 213 82% 20%;
+    --ring: 213 82% 30%;
+    --sidebar-primary: 213 82% 30%;
+    --sidebar-accent: 213 25% 85%;
+    --sidebar-accent-foreground: 213 82% 20%;
+    --sidebar-ring: 213 82% 30%;
   }
 
   * { @apply border-border; }
-  body {
-    @apply bg-background text-foreground;
-    font-family: 'Inter', sans-serif;
-  }
+  body { @apply bg-background text-foreground; font-family: 'Inter', sans-serif; }
   h1, h2, h3, .font-heading { font-family: 'Plus Jakarta Sans', sans-serif; }
 }
 
 @layer components {
-  .bento-card {
-    @apply bg-card rounded-xl border border-border p-5 shadow-sm;
-  }
-  .bento-card-accent {
-    @apply bg-accent/40 rounded-xl border border-border p-5;
-  }
+  .bento-card { @apply bg-card rounded-xl border border-border p-5 shadow-sm; }
+  .bento-card-accent { @apply bg-accent/40 rounded-xl border border-border p-5; }
+  .stat-value { @apply text-2xl font-bold font-heading; }
 }
 
 @layer utilities {
@@ -74,11 +66,5 @@
   .animate-slide-up { animation: slideUp 0.3s ease-out; }
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }

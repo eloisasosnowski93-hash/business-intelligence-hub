@@ -4,7 +4,6 @@ import { AppSidebar } from "@/components/AppSidebar";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { unit } = useUnit();
-
   return (
     <div data-unit={unit} className="min-h-screen bg-background">
       <SidebarProvider>

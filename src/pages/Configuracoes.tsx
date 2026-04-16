@@ -2,39 +2,46 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Settings, User, Mail, Save, CheckCircle } from "lucide-react";
+import { Save, CheckCircle, Mail, User } from "lucide-react";
 import { toast } from "sonner";
 
 const AREAS_LAB = [
-  { key: "portaria_145_2022", label: "Portaria 145/2022 — Componentes Automotivos", defaultResp: "Eloisa", defaultEmail: "" },
-  { key: "endotoxina_esterilidade", label: "Endotoxina & Esterilidade", defaultResp: "Kevin", defaultEmail: "" },
-  { key: "mri_iso10993", label: "MRI & ISO 10993/18", defaultResp: "Ana Beatriz", defaultEmail: "" },
+  { key: "portaria_145_2022", label: "Portaria 145/2022 — Componentes Automotivos", sugestoes: ["Eloisa"] },
+  { key: "endotoxina_esterilidade", label: "Endotoxina & Esterilidade", sugestoes: ["Kevin"] },
+  { key: "mri_iso10993", label: "MRI & ISO 10993/18", sugestoes: ["Ana Beatriz", "Kevin"] },
 ];
 
 const AREAS_OCP = [
-  { key: "portaria_384_2020", label: "Portaria 384/2020 — Equip. Vigilância Sanitária", defaultResp: "Ana Carolina", defaultEmail: "" },
-  { key: "portaria_145_2022_ocp", label: "Portaria 145/2022 — Automotivo (OCP)", defaultResp: "Eloisa", defaultEmail: "" },
-  { key: "portaria_071_2022", label: "Portaria 071/2022", defaultResp: "", defaultEmail: "" },
-  { key: "portaria_501_2021", label: "Portaria 501/2021 — Rodas", defaultResp: "", defaultEmail: "" },
+  { key: "portaria_384_2020", label: "Portaria 384/2020 — Equip. Vigilância Sanitária", sugestoes: ["Ana Carolina"] },
+  { key: "portaria_145_2022_ocp", label: "Portaria 145/2022 — Automotivo (OCP)", sugestoes: ["Eloisa"] },
+  { key: "portaria_071_2022", label: "Portaria 071/2022", sugestoes: ["Ana Carolina", "Eloisa"] },
+  { key: "portaria_501_2021", label: "Portaria 501/2021 — Rodas", sugestoes: ["Eloisa"] },
 ];
 
 type Config = { responsavel: string; email: string };
 
-function loadConfig(): Record<string, Config> {
-  try { return JSON.parse(localStorage.getItem("area_config") || "{}"); } catch { return {}; }
-}
+const DEFAULTS: Record<string, Config> = {
+  portaria_145_2022: { responsavel: "Eloisa", email: "" },
+  endotoxina_esterilidade: { responsavel: "Kevin", email: "" },
+  mri_iso10993: { responsavel: "Ana Beatriz", email: "" },
+  portaria_384_2020: { responsavel: "Ana Carolina", email: "" },
+  portaria_145_2022_ocp: { responsavel: "Eloisa", email: "" },
+  portaria_071_2022: { responsavel: "", email: "" },
+  portaria_501_2021: { responsavel: "", email: "" },
+};
 
 export default function Configuracoes() {
   const [saved, setSaved] = useState(false);
   const [configs, setConfigs] = useState<Record<string, Config>>(() => {
-    const stored = loadConfig();
-    const all = [...AREAS_LAB, ...AREAS_OCP];
-    return Object.fromEntries(all.map(a => [a.key, stored[a.key] || { responsavel: a.defaultResp, email: a.defaultEmail }]));
+    try {
+      const stored = JSON.parse(localStorage.getItem("area_config") || "{}");
+      return Object.fromEntries(Object.keys(DEFAULTS).map(k => [k, stored[k] || DEFAULTS[k]]));
+    } catch { return { ...DEFAULTS }; }
   });
   const [notifEmail, setNotifEmail] = useState(() => localStorage.getItem("notif_email") || "");
   const [notifDias, setNotifDias] = useState(() => localStorage.getItem("notif_dias") || "90");
 
-  const update = (key: string, field: "responsavel" | "email", value: string) => {
+  const update = (key: string, field: keyof Config, value: string) => {
     setConfigs(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
     setSaved(false);
   };
@@ -44,36 +51,60 @@ export default function Configuracoes() {
     localStorage.setItem("notif_email", notifEmail);
     localStorage.setItem("notif_dias", notifDias);
     setSaved(true);
-    toast.success("Configurações salvas com sucesso!");
+    toast.success("Configurações salvas!");
     setTimeout(() => setSaved(false), 3000);
   };
+
+  const renderArea = (area: typeof AREAS_LAB[0]) => (
+    <div key={area.key} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-muted/40 rounded-lg">
+      <div>
+        <p className="text-sm font-medium">{area.label}</p>
+        <div className="flex flex-wrap gap-1 mt-1">
+          {area.sugestoes.map(s => (
+            <button key={s} onClick={() => update(area.key, "responsavel", s)}
+              className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">Responsável</label>
+        <Input value={configs[area.key]?.responsavel || ""} placeholder="Nome"
+          onChange={e => update(area.key, "responsavel", e.target.value)} />
+      </div>
+      <div>
+        <label className="text-xs text-muted-foreground mb-1 block">E-mail</label>
+        <Input value={configs[area.key]?.email || ""} placeholder="email@scitec.com.br"
+          onChange={e => update(area.key, "email", e.target.value)} />
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">Configurações</h1>
-          <p className="text-sm text-muted-foreground mt-1">Defina responsáveis por área e configurações de notificação</p>
+          <h1 className="text-2xl font-heading font-bold">Configurações</h1>
+          <p className="text-sm text-muted-foreground mt-1">Responsáveis por área e notificações</p>
         </div>
         <Button onClick={handleSave} className="gap-2">
           {saved ? <CheckCircle className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-          {saved ? "Salvo!" : "Salvar Configurações"}
+          {saved ? "Salvo!" : "Salvar"}
         </Button>
       </div>
 
-      {/* Notificações */}
       <div className="bento-card">
         <h3 className="text-sm font-heading font-semibold mb-4 flex items-center gap-2">
-          <Mail className="h-4 w-4" /> Notificações de Vencimento de Certificados
+          <Mail className="h-4 w-4" /> Notificações de Vencimento
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">E-mail para notificações</label>
+            <label className="text-xs text-muted-foreground mb-1 block">E-mail para alertas</label>
             <Input placeholder="email@scitec.com.br" value={notifEmail} onChange={e => setNotifEmail(e.target.value)} />
-            <p className="text-[10px] text-muted-foreground mt-1">Receberá alertas de certificados próximos do vencimento</p>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Alertar com quantos dias de antecedência</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Alertar com antecedência de</label>
             <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={notifDias} onChange={e => setNotifDias(e.target.value)}>
               <option value="30">30 dias</option>
@@ -85,61 +116,22 @@ export default function Configuracoes() {
         </div>
       </div>
 
-      {/* Laboratório */}
       <div className="bento-card">
         <h3 className="text-sm font-heading font-semibold mb-4 flex items-center gap-2">
           <User className="h-4 w-4" />
-          <Badge className="text-xs bg-red-900 text-white">Laboratório</Badge>
-          Responsáveis por Área
+          <Badge className="bg-red-900 text-white text-xs">Laboratório</Badge>
+          Responsáveis
         </h3>
-        <div className="space-y-4">
-          {AREAS_LAB.map(area => (
-            <div key={area.key} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-muted/40 rounded-lg">
-              <div className="md:col-span-1">
-                <p className="text-sm font-medium text-foreground">{area.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Área: {area.key}</p>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Responsável</label>
-                <Input placeholder="Nome do responsável" value={configs[area.key]?.responsavel || ""}
-                  onChange={e => update(area.key, "responsavel", e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">E-mail do responsável</label>
-                <Input placeholder="responsavel@scitec.com.br" value={configs[area.key]?.email || ""}
-                  onChange={e => update(area.key, "email", e.target.value)} />
-              </div>
-            </div>
-          ))}
-        </div>
+        <div className="space-y-3">{AREAS_LAB.map(renderArea)}</div>
       </div>
 
-      {/* OCP */}
       <div className="bento-card">
         <h3 className="text-sm font-heading font-semibold mb-4 flex items-center gap-2">
           <User className="h-4 w-4" />
-          <Badge className="text-xs bg-blue-900 text-white">OCP</Badge>
+          <Badge className="bg-blue-900 text-white text-xs">OCP</Badge>
           Responsáveis por Portaria
         </h3>
-        <div className="space-y-4">
-          {AREAS_OCP.map(area => (
-            <div key={area.key} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 bg-muted/40 rounded-lg">
-              <div className="md:col-span-1">
-                <p className="text-sm font-medium text-foreground">{area.label}</p>
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Responsável</label>
-                <Input placeholder="Nome do responsável" value={configs[area.key]?.responsavel || ""}
-                  onChange={e => update(area.key, "responsavel", e.target.value)} />
-              </div>
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">E-mail do responsável</label>
-                <Input placeholder="responsavel@scitec.com.br" value={configs[area.key]?.email || ""}
-                  onChange={e => update(area.key, "email", e.target.value)} />
-              </div>
-            </div>
-          ))}
-        </div>
+        <div className="space-y-3">{AREAS_OCP.map(renderArea)}</div>
       </div>
     </div>
   );
