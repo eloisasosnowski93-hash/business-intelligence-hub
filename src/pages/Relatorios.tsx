@@ -63,10 +63,10 @@ export default function Relatorios() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Total de Leads" value={stats.total} icon={<Users className="h-5 w-5" />} />
-        <StatCard title="Vendidas" value={stats.vendidas} icon={<TrendingUp className="h-5 w-5" />} trend="positive" />
-        <StatCard title="Taxa de Conversão" value={`${taxaConversao}%`} icon={<TrendingUp className="h-5 w-5" />} />
-        <StatCard title="Valor Total" value={`R$ ${(stats.totalValor/1000).toFixed(0)}k`} icon={<DollarSign className="h-5 w-5" />} />
+        <StatCard label="Total de Leads" value={stats.total} icon={<Users className="h-5 w-5" />} />
+        <StatCard label="Vendidas" value={stats.vendidas} icon={<TrendingUp className="h-5 w-5" />} />
+        <StatCard label="Taxa de Conversão" value={`${taxaConversao}%`} icon={<TrendingUp className="h-5 w-5" />} />
+        <StatCard label="Valor Total" value={`R$ ${(stats.totalValor/1000).toFixed(0)}k`} icon={<DollarSign className="h-5 w-5" />} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
