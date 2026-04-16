@@ -12,6 +12,7 @@ import Endotoxina from "@/pages/Endotoxina";
 import Enriquecimento from "@/pages/Enriquecimento";
 import Relatorios from "@/pages/Relatorios";
 import Certificacao from "@/pages/Certificacao";
+import MotorBusca from "@/pages/MotorBusca";
 import Configuracoes from "@/pages/Configuracoes";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -33,6 +34,7 @@ const App = () => (
               <Route path="/enriquecimento" element={<Enriquecimento />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/certificacao" element={<Certificacao />} />
+              <Route path="/motor-busca" element={<MotorBusca />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
               <Route path="*" element={<NotFound />} />
             </Routes>

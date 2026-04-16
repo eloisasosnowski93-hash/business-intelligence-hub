@@ -5,12 +5,13 @@ import {
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Search, Users, FileBarChart, Zap, FlaskConical, ShieldCheck, Beaker, Settings } from "lucide-react";
+import { LayoutDashboard, Search, Users, FileBarChart, Zap, FlaskConical, ShieldCheck, Beaker, Settings, Sparkles } from "lucide-react";
 
 const labItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Prospecção Lab", url: "/prospeccao", icon: Search },
   { title: "Endotoxina & Esterilidade", url: "/endotoxina", icon: FlaskConical },
+  { title: "Motor de Busca", url: "/motor-busca", icon: Sparkles },
   { title: "Enriquecimento", url: "/enriquecimento", icon: Zap },
   { title: "CRM Leads", url: "/crm", icon: Users },
   { title: "Relatórios", url: "/relatorios", icon: FileBarChart },
@@ -21,6 +22,7 @@ const ocpItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Prospecção OCP", url: "/prospeccao", icon: Search },
   { title: "Certificação OCP", url: "/certificacao", icon: ShieldCheck },
+  { title: "Motor de Busca", url: "/motor-busca", icon: Sparkles },
   { title: "Enriquecimento", url: "/enriquecimento", icon: Zap },
   { title: "CRM Leads", url: "/crm", icon: Users },
   { title: "Relatórios", url: "/relatorios", icon: FileBarChart },
