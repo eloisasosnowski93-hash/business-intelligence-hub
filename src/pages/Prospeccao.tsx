@@ -7,19 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { UrgencyBadge, LeadScoreBadge } from "@/components/Badges";
-import { Search, Loader2, Building2, MapPin, FileText, AlertCircle, Database, Globe, UserCheck } from "lucide-react";
+import { Search, Loader2, Building2, MapPin, FileText, AlertCircle, Database, Globe, UserCheck, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supabase } from "@/integrations/supabase/client";
 
 function computeScoring(company: any, portaria: string) {
   const reasons: string[] = [];
   let score = 0;
-  const cnae = String(company.cnae_fiscal);
-  const allCnaes = [cnae, ...(company.cnaes_secundarios?.map((c: any) => String(c.codigo)) ?? [])];
-  if (company.situacao_cadastral === 2) { score += 20; reasons.push("Empresa ativa"); }
+  const allCnaes = [String(company.cnae_fiscal || company.cnae_principal || ""),
+    ...(company.cnaes_secundarios?.map((c: any) => String(c.codigo || c)) ?? [])];
+  if (company.situacao_cadastral === 2 || company.situacao_cadastral === "Ativa") { score += 20; reasons.push("Empresa ativa"); }
   if (company.email) { score += 10; reasons.push("E-mail disponível"); }
-  if (company.telefone_1) { score += 10; reasons.push("Telefone disponível"); }
-  if (company.qsa?.length > 0) { score += 10; reasons.push("Decisores identificados"); }
+  if (company.telefone_1 || company.telefones?.length) { score += 10; reasons.push("Telefone disponível"); }
+  if ((company.qsa || company.QSA)?.length > 0) { score += 10; reasons.push("Decisores identificados"); }
   if (portaria === "endotoxina") {
     if (allCnaes.some(c => ["2110","2121","2122","2123","2130","3250"].some(a => c.startsWith(a)))) {
       score += 40; reasons.push("CNAE farmacêutico — demanda ensaios endotoxina");
@@ -43,13 +44,10 @@ function computeScoring(company: any, portaria: string) {
   return { score, urgency: score >= 60 ? "alta" : score >= 30 ? "media" : "baixa", reasons };
 }
 
-// LAB: apenas Endotoxina e MRI — SEM Portaria 145/2022 e SEM Eloisa
 const PORTARIAS_LAB = [
   { value: "endotoxina", label: "Endotoxina & Esterilidade (Kevin)" },
   { value: "mri_iso10993", label: "MRI & ISO 10993/18 (Ana Beatriz)" },
 ];
-
-// OCP: todas as portarias
 const PORTARIAS_OCP = [
   { value: "145/2022", label: "Portaria 145/2022 — Automotivo (Eloisa)" },
   { value: "384/2020", label: "Portaria 384/2020 — Vigilância Sanitária (Ana Carolina)" },
@@ -66,7 +64,6 @@ const CNAES_LAB = [
   { code: "2121101", label: "2121-1/01 — Medicamentos uso humano" },
   { code: "3250709", label: "3250-7/09 — Outros equip. médicos" },
 ];
-
 const CNAES_OCP = [
   { code: "2910701", label: "2910-7/01 — Automóveis e utilitários" },
   { code: "2941700", label: "2941-7/00 — Peças sistema motor" },
@@ -77,6 +74,17 @@ const CNAES_OCP = [
   { code: "2710401", label: "2710-4/01 — Motores e geradores" },
 ];
 
+const ESTADOS_BR = [
+  { code: "SP", label: "São Paulo" }, { code: "RJ", label: "Rio de Janeiro" },
+  { code: "MG", label: "Minas Gerais" }, { code: "RS", label: "Rio Grande do Sul" },
+  { code: "PR", label: "Paraná" }, { code: "SC", label: "Santa Catarina" },
+  { code: "BA", label: "Bahia" }, { code: "GO", label: "Goiás" },
+  { code: "ES", label: "Espírito Santo" }, { code: "PE", label: "Pernambuco" },
+  { code: "AM", label: "Amazonas" }, { code: "CE", label: "Ceará" },
+  { code: "MT", label: "Mato Grosso" }, { code: "MS", label: "Mato Grosso do Sul" },
+  { code: "DF", label: "Distrito Federal" }, { code: "PA", label: "Pará" },
+];
+
 export default function Prospeccao() {
   const { unit, unitLabel } = useUnit();
   const [searchTab, setSearchTab] = useState<"interno" | "externo">("interno");
@@ -85,46 +93,59 @@ export default function Prospeccao() {
   const [searchType, setSearchType] = useState<"cnpj" | "cnae">("cnpj");
   const [cnpjInput, setCnpjInput] = useState("");
   const [selectedCnae, setSelectedCnae] = useState("");
-  const [trigger, setTrigger] = useState<{ type: string; value: string; portaria: string } | null>(null);
+  const [selectedEstado, setSelectedEstado] = useState("SP");
+  const [trigger, setTrigger] = useState<{ type: string; value: string; portaria: string; estado?: string } | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const portarias = unit === "lab" ? PORTARIAS_LAB : PORTARIAS_OCP;
   const cnaes = unit === "lab" ? CNAES_LAB : CNAES_OCP;
   const categoriaKey = PORTARIA_TO_CATEGORIA[selectedPortaria];
   const { data: internalLeads, isLoading: internalLoading } = useSearchLeads(internalSearch, categoriaKey);
 
+  // Busca por CNPJ — OpenCNPJ (gratuito, sem auth)
   const cnpjQuery = useQuery({
-    queryKey: ["brasilapi-cnpj", trigger],
+    queryKey: ["opencnpj", trigger],
     queryFn: async () => {
       const clean = trigger!.value.replace(/\D/g, "");
-      const res = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
+      const res = await fetch(`https://api.opencnpj.org/${clean}`);
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || `CNPJ não encontrado (${res.status})`);
+        // Fallback BrasilAPI
+        const res2 = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
+        if (!res2.ok) throw new Error("CNPJ não encontrado");
+        const d = await res2.json();
+        return { company: d, scoring: computeScoring(d, trigger!.portaria), source: "BrasilAPI" };
       }
-      const company = await res.json();
-      // Monta contatos a partir do QSA (decisores)
-      const decisores = (company.qsa || []).map((s: any) => ({
-        nome: s.nome_socio,
-        cargo: s.qualificacao_socio,
-      }));
-      return { company, scoring: computeScoring(company, trigger!.portaria), decisores };
+      const d = await res.json();
+      return { company: d, scoring: computeScoring(d, trigger!.portaria), source: "OpenCNPJ" };
     },
     enabled: !!trigger && trigger.type === "cnpj",
     retry: 0,
     staleTime: 1000 * 60 * 30,
   });
 
+  // Busca por CNAE — OpenCNPJ lista empresas por CNAE + UF
   const cnaeQuery = useQuery({
-    queryKey: ["brasilapi-cnae", trigger],
+    queryKey: ["cnae-search", trigger],
     queryFn: async () => {
-      // BrasilAPI CNAE v2 retorna info do CNAE
-      const res = await fetch(`https://brasilapi.com.br/api/cnae/v2/${trigger!.value}`);
-      if (!res.ok) throw new Error("CNAE não encontrado. Tente buscar por CNPJ diretamente.");
-      return res.json();
+      const cnae = trigger!.value;
+      const uf = trigger!.estado || "SP";
+      // OpenCNPJ: busca por CNAE principal + UF
+      const res = await fetch(`https://api.opencnpj.org/search?cnae_principal=${cnae}&uf=${uf}&situacao_cadastral=Ativa&limit=20`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.data?.length > 0) return { empresas: data.data, source: "OpenCNPJ", total: data.total };
+      }
+      // Fallback: CNPJá open API
+      const res2 = await fetch(`https://open.cnpja.com/office?cnaes=${cnae}&uf=${uf}&limit=20`);
+      if (res2.ok) {
+        const data2 = await res2.json();
+        if (data2?.records?.length > 0) return { empresas: data2.records, source: "CNPJá", total: data2.total };
+      }
+      throw new Error(`Nenhuma empresa encontrada para este CNAE em ${uf}. Tente outro estado ou importe um CSV com CNPJs do setor.`);
     },
     enabled: !!trigger && trigger.type === "cnae",
     retry: 0,
-    staleTime: 1000 * 60 * 60,
+    staleTime: 1000 * 60 * 30,
   });
 
   const handleSearch = () => {
@@ -134,12 +155,40 @@ export default function Prospeccao() {
       setTrigger({ type: "cnpj", value: clean, portaria: selectedPortaria });
     } else {
       if (!selectedCnae) { toast.error("Selecione um CNAE"); return; }
-      setTrigger({ type: "cnae", value: selectedCnae, portaria: selectedPortaria });
+      setTrigger({ type: "cnae", value: selectedCnae, portaria: selectedPortaria, estado: selectedEstado });
+      toast.info(`Buscando empresas com CNAE ${selectedCnae} em ${selectedEstado}...`);
     }
   };
 
+  const handleSaveLead = async (empresa: any) => {
+    const id = empresa.cnpj || empresa.office?.cnpj;
+    setSavingId(id);
+    try {
+      const nome = empresa.razao_social || empresa.company?.name || empresa.office?.alias || "—";
+      const email = empresa.email || empresa.company?.email || empresa.office?.phones?.[0]?.number || null;
+      const tel = empresa.telefones?.[0] ? `(${empresa.telefones[0].ddd}) ${empresa.telefones[0].numero}` :
+        empresa.office?.phones?.[0]?.number || null;
+      const uf = empresa.uf || empresa.office?.address?.state || null;
+      await supabase.from("leads").insert({
+        empresa: nome,
+        categoria: categoriaKey || "portaria_145_2022",
+        contato_email: email,
+        contato_telefone: tel,
+        estado_negocio: "Novo Lead",
+        etapa: "Prospecção",
+        origem_lead: "busca_cnae",
+        responsavel: portarias.find(p => p.value === selectedPortaria)?.label.split("(")[1]?.replace(")", "") || null,
+        produtos: `CNAE: ${empresa.cnae_principal || empresa.cnae_fiscal}`,
+        nacionalidade: uf,
+      });
+      toast.success(`${nome} adicionado ao CRM!`);
+    } catch (e: any) { toast.error(e.message); }
+    finally { setSavingId(null); }
+  };
+
   const isLoading = cnpjQuery.isFetching || cnaeQuery.isFetching;
-  const result = cnpjQuery.data;
+  const cnpjResult = cnpjQuery.data;
+  const cnaeResult = cnaeQuery.data;
 
   const formatCnpj = (v: string) => {
     const d = v.replace(/\D/g, "").slice(0, 14);
@@ -147,11 +196,15 @@ export default function Prospeccao() {
       .replace(/\.(\d{3})(\d)/, ".$1/$2").replace(/(\d{4})(\d)/, "$1-$2");
   };
 
+  const getEmail = (c: any) => c.email || null;
+  const getTel = (c: any) => c.telefones?.[0] ? `(${c.telefones[0].ddd}) ${c.telefones[0].numero}` : c.ddd_telefone_1 ? `(${c.ddd_telefone_1}) ${c.telefone_1}` : null;
+  const getSocios = (c: any) => c.QSA || c.qsa || [];
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-heading font-bold">{unit === "lab" ? "Prospecção — Laboratório" : "Prospecção — OCP"}</h1>
-        <p className="text-sm text-muted-foreground mt-1">Busca híbrida: base interna + BrasilAPI · {unitLabel}</p>
+        <p className="text-sm text-muted-foreground mt-1">Base interna + busca real de empresas · {unitLabel}</p>
       </div>
 
       <div className="bento-card">
@@ -167,7 +220,7 @@ export default function Prospeccao() {
       <Tabs value={searchTab} onValueChange={v => setSearchTab(v as "interno" | "externo")}>
         <TabsList className="w-full max-w-md">
           <TabsTrigger value="interno" className="flex-1 gap-2"><Database className="h-4 w-4" />Base Interna (CRM)</TabsTrigger>
-          <TabsTrigger value="externo" className="flex-1 gap-2"><Globe className="h-4 w-4" />Busca Externa (BrasilAPI)</TabsTrigger>
+          <TabsTrigger value="externo" className="flex-1 gap-2"><Globe className="h-4 w-4" />Busca Externa (Receita Federal)</TabsTrigger>
         </TabsList>
 
         <TabsContent value="interno" className="space-y-4">
@@ -198,8 +251,9 @@ export default function Prospeccao() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{l.etapa || "—"}</TableCell>
                       <TableCell><Badge variant={l.estado_negocio === "Vendida" ? "default" : l.estado_negocio === "Perdida" ? "destructive" : "secondary"} className="text-xs">{l.estado_negocio || "—"}</Badge></TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{l.contato_nome || "—"}
-                        {l.contato_email && <div className="text-[10px]">{l.contato_email}</div>}
+                      <TableCell className="text-xs text-muted-foreground">
+                        {l.contato_nome || "—"}
+                        {l.contato_email && <div className="text-[10px] text-primary">{l.contato_email}</div>}
                         {l.contato_telefone && <div className="text-[10px]">{l.contato_telefone}</div>}
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{l.responsavel_csv || l.responsavel || "—"}</TableCell>
@@ -211,10 +265,9 @@ export default function Prospeccao() {
           )}
           {internalLeads?.length === 0 && internalSearch.length >= 2 && (
             <div className="bento-card text-center py-8">
-              <Search className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Nenhum lead encontrado na base interna</p>
+              <p className="text-sm text-muted-foreground">Nenhum lead encontrado</p>
               <Button variant="outline" size="sm" className="mt-3" onClick={() => setSearchTab("externo")}>
-                <Globe className="h-4 w-4 mr-1" />Buscar via BrasilAPI
+                <Globe className="h-4 w-4 mr-1" />Buscar novas empresas
               </Button>
             </div>
           )}
@@ -228,41 +281,50 @@ export default function Prospeccao() {
 
         <TabsContent value="externo" className="space-y-4">
           <div className="bento-card">
-            <h3 className="text-sm font-heading font-semibold mb-2">🌐 Busca Externa — BrasilAPI (Receita Federal)</h3>
+            <h3 className="text-sm font-heading font-semibold mb-1">🌐 Buscar Novas Empresas — Receita Federal</h3>
             <p className="text-xs text-muted-foreground mb-4">
-              A busca por CNPJ retorna dados cadastrais completos incluindo sócios/decisores.
-              A busca por CNAE retorna a descrição oficial do código — para listar empresas de um setor, importe um CSV com CNPJs na seção CRM.
+              Dados oficiais via OpenCNPJ e CNPJá. Por CNPJ: dados completos + sócios. Por CNAE: lista empresas ativas do setor por estado.
             </p>
             <div className="flex gap-2 mb-4">
               <Button variant={searchType === "cnpj" ? "default" : "outline"} size="sm" onClick={() => setSearchType("cnpj")}>
                 <Building2 className="h-4 w-4 mr-1" />Por CNPJ
               </Button>
               <Button variant={searchType === "cnae" ? "default" : "outline"} size="sm" onClick={() => setSearchType("cnae")}>
-                <FileText className="h-4 w-4 mr-1" />Por CNAE (descrição)
+                <FileText className="h-4 w-4 mr-1" />Por CNAE + Estado
               </Button>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {searchType === "cnpj" ? (
-                <div>
+                <div className="md:col-span-2">
                   <label className="text-xs text-muted-foreground mb-1 block">CNPJ da empresa</label>
                   <Input placeholder="00.000.000/0001-00" value={cnpjInput}
                     onChange={e => setCnpjInput(formatCnpj(e.target.value))}
                     onKeyDown={e => e.key === "Enter" && handleSearch()} />
                 </div>
               ) : (
-                <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">CNAE</label>
-                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={selectedCnae} onChange={e => setSelectedCnae(e.target.value)}>
-                    <option value="">Selecione um CNAE...</option>
-                    {cnaes.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">CNAE do setor</label>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={selectedCnae} onChange={e => setSelectedCnae(e.target.value)}>
+                      <option value="">Selecione...</option>
+                      {cnaes.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Estado</label>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={selectedEstado} onChange={e => setSelectedEstado(e.target.value)}>
+                      {ESTADOS_BR.map(e => <option key={e.code} value={e.code}>{e.label}</option>)}
+                    </select>
+                  </div>
+                </>
               )}
-              <div className="flex items-end">
+              <div className={`flex items-end ${searchType === "cnpj" ? "" : ""}`}>
                 <Button onClick={handleSearch} disabled={isLoading} className="w-full gap-2">
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                  Buscar
+                  {isLoading ? "Buscando..." : "Buscar"}
                 </Button>
               </div>
             </div>
@@ -270,72 +332,131 @@ export default function Prospeccao() {
 
           {(cnpjQuery.error || cnaeQuery.error) && (
             <div className="bento-card border-l-4 border-l-destructive">
-              <div className="flex items-center gap-2 text-destructive">
-                <AlertCircle className="h-4 w-4" />
-                <p className="text-sm font-medium">{(cnpjQuery.error as Error)?.message || (cnaeQuery.error as Error)?.message}</p>
+              <div className="flex items-start gap-2 text-destructive">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">{(cnpjQuery.error as Error)?.message || (cnaeQuery.error as Error)?.message}</p>
+                  {searchType === "cnae" && (
+                    <p className="text-xs mt-1 text-muted-foreground">
+                      💡 Alternativa: baixe uma lista em <a href="https://casadosdados.com.br" target="_blank" className="underline">casadosdados.com.br</a> ou <a href="https://cnpj.biz" target="_blank" className="underline">cnpj.biz</a> e importe via CSV no CRM.
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {cnaeQuery.data && trigger?.type === "cnae" && (
+          {/* RESULTADOS CNAE */}
+          {cnaeResult && trigger?.type === "cnae" && (
             <div className="bento-card">
-              <h3 className="text-sm font-heading font-semibold mb-3">📋 Informações do CNAE</h3>
-              <div className="space-y-2 text-sm">
-                <div><span className="text-muted-foreground">Código:</span> <Badge variant="outline">{cnaeQuery.data.codigo}</Badge></div>
-                <div><span className="text-muted-foreground">Descrição:</span> <span className="font-medium">{cnaeQuery.data.descricao}</span></div>
-                {cnaeQuery.data.observacoes && <div><span className="text-muted-foreground">Observações:</span> <span>{cnaeQuery.data.observacoes}</span></div>}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-heading font-semibold">
+                  🏭 Empresas encontradas — {cnaeResult.source}
+                  {cnaeResult.total && <span className="text-muted-foreground font-normal ml-1">({cnaeResult.total} total)</span>}
+                </h3>
+                <Badge variant="secondary">{cnaeResult.empresas.length} exibidas</Badge>
               </div>
-              <div className="mt-3 p-3 bg-muted rounded-md text-xs text-muted-foreground">
-                💡 Para prospectar empresas deste setor, importe uma planilha de CNPJs na seção <strong>CRM Leads</strong>. A BrasilAPI não possui endpoint de busca por setor.
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader><TableRow>
+                    <TableHead>Empresa</TableHead><TableHead>CNAE</TableHead>
+                    <TableHead>Localização</TableHead><TableHead>Contato</TableHead>
+                    <TableHead>Situação</TableHead><TableHead>Ação</TableHead>
+                  </TableRow></TableHeader>
+                  <TableBody>
+                    {cnaeResult.empresas.map((emp: any, i: number) => {
+                      const nome = emp.razao_social || emp.company?.name || emp.office?.alias || "—";
+                      const cnpj = emp.cnpj || emp.office?.cnpj || "—";
+                      const email = emp.email || emp.company?.email || null;
+                      const tel = emp.telefones?.[0] ? `(${emp.telefones[0].ddd}) ${emp.telefones[0].numero}` : null;
+                      const cidade = emp.municipio || emp.office?.address?.city || "—";
+                      const uf = emp.uf || emp.office?.address?.state || "—";
+                      const situacao = emp.situacao_cadastral || "Ativa";
+                      const cnaeCode = emp.cnae_principal || emp.cnae_fiscal;
+                      return (
+                        <TableRow key={i} className="hover:bg-muted/50">
+                          <TableCell>
+                            <p className="font-medium text-sm">{nome}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">{cnpj}</p>
+                          </TableCell>
+                          <TableCell><Badge variant="outline" className="text-[10px]">{cnaeCode}</Badge></TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{cidade}/{uf}</TableCell>
+                          <TableCell className="text-xs">
+                            {email ? <a href={`mailto:${email}`} className="text-primary hover:underline block">{email}</a> : <span className="text-muted-foreground">—</span>}
+                            {tel && <span className="text-muted-foreground">{tel}</span>}
+                          </TableCell>
+                          <TableCell><Badge variant={situacao === "Ativa" ? "default" : "destructive"} className="text-xs">{situacao}</Badge></TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline" className="text-xs h-7"
+                              disabled={savingId === cnpj}
+                              onClick={() => handleSaveLead(emp)}>
+                              {savingId === cnpj ? <Loader2 className="h-3 w-3 animate-spin" /> : "+ CRM"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               </div>
             </div>
           )}
 
-          {result && (
+          {/* RESULTADO CNPJ */}
+          {cnpjResult && trigger?.type === "cnpj" && (
             <div className="space-y-4 animate-slide-up">
               <div className="bento-card-accent">
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-heading font-semibold">📊 Lead Scoring Automático</h3>
+                  <div>
+                    <h3 className="text-sm font-heading font-semibold">📊 Lead Scoring — {cnpjResult.source}</h3>
+                  </div>
                   <div className="flex gap-2">
-                    <LeadScoreBadge score={result.scoring.score} />
-                    <UrgencyBadge urgency={result.scoring.urgency} />
+                    <LeadScoreBadge score={cnpjResult.scoring.score} />
+                    <UrgencyBadge urgency={cnpjResult.scoring.urgency} />
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {result.scoring.reasons.map((r, i) => <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>)}
-                  {!result.scoring.reasons.length && <span className="text-xs text-muted-foreground">Nenhum critério de portaria atendido</span>}
+                  {cnpjResult.scoring.reasons.map((r, i) => <Badge key={i} variant="secondary" className="text-xs">{r}</Badge>)}
+                  {!cnpjResult.scoring.reasons.length && <span className="text-xs text-muted-foreground">Nenhum critério de portaria atendido</span>}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <div className="bento-card">
-                  <h3 className="text-sm font-heading font-semibold mb-3">🏢 Dados Cadastrais</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-heading font-semibold">🏢 Dados Cadastrais</h3>
+                    <Button size="sm" variant="outline" className="text-xs h-7 gap-1"
+                      disabled={!!savingId}
+                      onClick={() => handleSaveLead(cnpjResult.company)}>
+                      {savingId ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      + Salvar no CRM
+                    </Button>
+                  </div>
                   <div className="space-y-2 text-sm">
-                    <div><span className="text-muted-foreground">Razão Social:</span> <span className="font-medium">{result.company.razao_social}</span></div>
-                    {result.company.nome_fantasia && <div><span className="text-muted-foreground">Fantasia:</span> <span>{result.company.nome_fantasia}</span></div>}
-                    <div><span className="text-muted-foreground">CNPJ:</span> <span className="font-mono">{result.company.cnpj}</span></div>
-                    <div><span className="text-muted-foreground">Situação:</span> <Badge variant={result.company.situacao_cadastral === 2 ? "default" : "destructive"} className="text-xs">{result.company.descricao_situacao_cadastral}</Badge></div>
-                    <div className="flex gap-1"><MapPin className="h-3 w-3 mt-1 text-muted-foreground shrink-0" /><span>{result.company.logradouro}, {result.company.municipio}/{result.company.uf}</span></div>
-                    {result.company.email && <div><span className="text-muted-foreground">Email:</span> <a href={`mailto:${result.company.email}`} className="text-primary hover:underline">{result.company.email}</a></div>}
-                    {result.company.ddd_telefone_1 && <div><span className="text-muted-foreground">Tel:</span> <span>({result.company.ddd_telefone_1}) {result.company.telefone_1}</span></div>}
-                    {result.company.porte && <div><span className="text-muted-foreground">Porte:</span> <Badge variant="outline" className="text-xs">{result.company.porte}</Badge></div>}
-                    {result.company.natureza_juridica && <div><span className="text-muted-foreground">Natureza:</span> <span className="text-xs">{result.company.natureza_juridica}</span></div>}
+                    <div><span className="text-muted-foreground">Razão Social:</span> <span className="font-medium">{cnpjResult.company.razao_social || cnpjResult.company.company?.name}</span></div>
+                    {cnpjResult.company.nome_fantasia && <div><span className="text-muted-foreground">Fantasia:</span> <span>{cnpjResult.company.nome_fantasia}</span></div>}
+                    <div><span className="text-muted-foreground">CNPJ:</span> <span className="font-mono">{cnpjResult.company.cnpj}</span></div>
+                    <div><span className="text-muted-foreground">Situação:</span> <Badge variant="default" className="text-xs">{cnpjResult.company.situacao_cadastral || cnpjResult.company.descricao_situacao_cadastral}</Badge></div>
+                    <div className="flex gap-1"><MapPin className="h-3 w-3 mt-1 text-muted-foreground shrink-0" />
+                      <span>{cnpjResult.company.logradouro || cnpjResult.company.office?.address?.street}, {cnpjResult.company.municipio || cnpjResult.company.office?.address?.city}/{cnpjResult.company.uf || cnpjResult.company.office?.address?.state}</span>
+                    </div>
+                    {getEmail(cnpjResult.company) && <div><span className="text-muted-foreground">Email:</span> <a href={`mailto:${getEmail(cnpjResult.company)}`} className="text-primary hover:underline">{getEmail(cnpjResult.company)}</a></div>}
+                    {getTel(cnpjResult.company) && <div><span className="text-muted-foreground">Tel:</span> <span>{getTel(cnpjResult.company)}</span></div>}
+                    {cnpjResult.company.porte_empresa && <div><span className="text-muted-foreground">Porte:</span> <Badge variant="outline" className="text-xs">{cnpjResult.company.porte_empresa}</Badge></div>}
+                    {cnpjResult.company.capital_social && <div><span className="text-muted-foreground">Capital Social:</span> <span className="text-xs">R$ {cnpjResult.company.capital_social}</span></div>}
                   </div>
                 </div>
-
                 <div className="bento-card">
                   <h3 className="text-sm font-heading font-semibold mb-3">📋 CNAEs</h3>
                   <div className="space-y-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Principal:</span>
-                      <Badge variant="outline" className="text-xs ml-1">{result.company.cnae_fiscal}</Badge>
-                      <p className="mt-1">{result.company.cnae_fiscal_descricao}</p>
+                    <div><span className="text-muted-foreground">Principal:</span> <Badge variant="outline" className="text-xs ml-1">{cnpjResult.company.cnae_fiscal || cnpjResult.company.cnae_principal}</Badge>
+                      <p className="mt-1 text-xs">{cnpjResult.company.cnae_fiscal_descricao}</p>
                     </div>
-                    {result.company.cnaes_secundarios?.length > 0 && (
+                    {cnpjResult.company.cnaes_secundarios?.length > 0 && (
                       <div><span className="text-muted-foreground block mb-1">Secundários:</span>
                         <div className="space-y-1 max-h-32 overflow-y-auto">
-                          {result.company.cnaes_secundarios.slice(0, 10).map((c: any, i: number) => (
-                            <div key={i} className="text-xs"><Badge variant="outline" className="text-[10px] mr-1">{c.codigo}</Badge>{c.descricao}</div>
+                          {cnpjResult.company.cnaes_secundarios.slice(0, 8).map((c: any, i: number) => (
+                            <div key={i} className="text-xs"><Badge variant="outline" className="text-[10px] mr-1">{c.codigo || c}</Badge>{c.descricao}</div>
                           ))}
                         </div>
                       </div>
@@ -344,34 +465,30 @@ export default function Prospeccao() {
                 </div>
               </div>
 
-              {/* DECISORES / QSA */}
-              {result.decisores && result.decisores.length > 0 && (
+              {getSocios(cnpjResult.company).length > 0 && (
                 <div className="bento-card">
                   <h3 className="text-sm font-heading font-semibold mb-3 flex items-center gap-2">
-                    <UserCheck className="h-4 w-4 text-primary" /> Decisores / Quadro Societário
+                    <UserCheck className="h-4 w-4 text-primary" /> Decisores / Sócios
                   </h3>
                   <div className="space-y-2">
-                    {result.decisores.map((d: any, i: number) => (
+                    {getSocios(cnpjResult.company).map((s: any, i: number) => (
                       <div key={i} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                         <div>
-                          <p className="font-medium text-sm">{d.nome}</p>
-                          <p className="text-xs text-muted-foreground">{d.cargo}</p>
+                          <p className="font-medium text-sm">{s.nome_socio}</p>
+                          <p className="text-xs text-muted-foreground">{s.qualificacao_socio}</p>
                         </div>
-                        <div className="flex gap-2">
-                          {result.company.email && (
-                            <a href={`mailto:${result.company.email}`}
-                              className="text-xs text-primary hover:underline flex items-center gap-1">
-                              ✉ E-mail empresa
-                            </a>
-                          )}
-                        </div>
+                        {getEmail(cnpjResult.company) && (
+                          <a href={`mailto:${getEmail(cnpjResult.company)}`} className="text-xs text-primary hover:underline">✉ Contato</a>
+                        )}
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-3 p-2 bg-muted/30 rounded">
-                    ℹ️ Contatos pessoais dos sócios não estão disponíveis na Receita Federal.
-                    Use o enriquecimento via LinkedIn ou ferramentas como Apollo.io para e-mails individuais.
-                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <a href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(getSocios(cnpjResult.company)[0]?.nome_socio || "")}`}
+                      target="_blank" className="text-xs text-primary hover:underline flex items-center gap-1">
+                      <ExternalLink className="h-3 w-3" /> Buscar no LinkedIn
+                    </a>
+                  </div>
                 </div>
               )}
             </div>
