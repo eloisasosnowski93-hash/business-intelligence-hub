@@ -3,9 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ShieldCheck, Plus, Bell, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink } from "lucide-react";
+import { ShieldCheck, Plus, Bell, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ClipboardPaste } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
