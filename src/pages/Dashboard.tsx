@@ -1,13 +1,14 @@
 import { useUnit } from "@/contexts/UnitContext";
 import { useLeadStats, useLeads, CATEGORIA_LABELS, CATEGORIA_RESPONSAVEL } from "@/hooks/useLeads";
 import { StatCard } from "@/components/StatCard";
-import { CrmStatusBadge } from "@/components/Badges";
-import { Flame, AlertTriangle, Clock, CheckCircle, Users, TrendingUp, Search, Zap, Loader2 } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle, Users, Search, Zap, Loader2, Bell, ShieldCheck } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Dashboard() {
   const { unit, unitLabel } = useUnit();
@@ -16,6 +17,22 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<string | null>(null);
   const navigate = useNavigate();
+
+  // OCP: 90-day expiring certificates alert
+  const { data: certAlerts } = useQuery({
+    queryKey: ["cert-alerts-90d"],
+    queryFn: async () => {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const limit = new Date(today.getTime() + 90 * 86400000);
+      const { data, error } = await supabase
+        .from("certificados")
+        .select("id, data_validade")
+        .lte("data_validade", limit.toISOString().slice(0, 10));
+      if (error) throw error;
+      return (data || []).length;
+    },
+    enabled: unit === "ocp",
+  });
 
   const filteredLeads = (leads || []).filter((l) => {
     if (activeFilter && activeFilter !== "todos") {
@@ -48,6 +65,26 @@ export default function Dashboard() {
         <h1 className="text-2xl font-heading font-bold text-foreground">Painel de Inteligência</h1>
         <p className="text-sm text-muted-foreground mt-1">Visão geral · {unitLabel} · {stats?.total || 0} leads</p>
       </div>
+
+      {/* OCP — 90-day cert alert */}
+      {unit === "ocp" && (
+        <button
+          onClick={() => navigate("/certificacao?filter=criticos")}
+          className={`w-full text-left bento-card transition-all ${(certAlerts || 0) > 0 ? "border-red-300 bg-red-50 hover:bg-red-100" : "hover:bg-accent"}`}
+        >
+          <div className="flex items-center gap-3">
+            <div className={`h-12 w-12 rounded-full flex items-center justify-center ${(certAlerts || 0) > 0 ? "bg-red-200" : "bg-green-100"}`}>
+              {(certAlerts || 0) > 0 ? <Bell className="h-6 w-6 text-red-700" /> : <ShieldCheck className="h-6 w-6 text-green-700" />}
+            </div>
+            <div className="flex-1">
+              <p className="text-lg font-bold">
+                {certAlerts || 0} certificado(s) vencem em ≤ 90 dias
+              </p>
+              <p className="text-xs text-muted-foreground">Clique para ver as empresas que precisam renovar</p>
+            </div>
+          </div>
+        </button>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
