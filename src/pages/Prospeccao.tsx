@@ -92,10 +92,11 @@ export default function Prospeccao() {
   const [searchTab, setSearchTab] = useState<"interno" | "externo">("interno");
   const [internalSearch, setInternalSearch] = useState("");
   const [selectedPortaria, setSelectedPortaria] = useState(unit === "lab" ? "endotoxina" : "145/2022");
-  const [searchType, setSearchType] = useState<"cnpj" | "cnae">("cnpj");
+  const [searchType, setSearchType] = useState<"cnpj" | "cnae" | "palavra">("cnpj");
   const [cnpjInput, setCnpjInput] = useState("");
   const [selectedCnae, setSelectedCnae] = useState("");
   const [selectedEstado, setSelectedEstado] = useState("SP");
+  const [keyword, setKeyword] = useState("");
   const [trigger, setTrigger] = useState<{ type: string; value: string; portaria: string; estado?: string } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [hideCertified, setHideCertified] = useState(false);
