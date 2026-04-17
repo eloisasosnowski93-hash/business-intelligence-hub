@@ -164,15 +164,45 @@ export default function Prospeccao() {
     staleTime: 1000 * 60 * 30,
   });
 
+  // Busca por palavra-chave + estado (fallback quando CNAE falha)
+  const keywordQuery = useQuery({
+    queryKey: ["keyword-search", trigger],
+    queryFn: async () => {
+      const q = trigger!.value;
+      const uf = trigger!.estado || "SP";
+      // OpenCNPJ search por razão social
+      const res = await fetch(`https://api.opencnpj.org/search?razao_social=${encodeURIComponent(q)}&uf=${uf}&situacao_cadastral=Ativa&limit=20`);
+      if (res.ok) {
+        const d = await res.json();
+        if (d?.data?.length > 0) return { empresas: d.data, source: "OpenCNPJ", total: d.total };
+      }
+      // Fallback CNPJá — busca por nome
+      const res2 = await fetch(`https://open.cnpja.com/office?search=${encodeURIComponent(q)}&uf=${uf}&limit=20`);
+      if (res2.ok) {
+        const d2 = await res2.json();
+        if (d2?.records?.length > 0) return { empresas: d2.records, source: "CNPJá", total: d2.total };
+      }
+      throw new Error(`Nenhuma empresa encontrada para "${q}" em ${uf}.`);
+    },
+    enabled: !!trigger && trigger.type === "palavra",
+    retry: 0,
+    staleTime: 1000 * 60 * 30,
+  });
+
   const handleSearch = () => {
     if (searchType === "cnpj") {
       const clean = cnpjInput.replace(/\D/g, "");
       if (clean.length !== 14) { toast.error("CNPJ deve ter 14 dígitos"); return; }
       setTrigger({ type: "cnpj", value: clean, portaria: selectedPortaria });
-    } else {
+    } else if (searchType === "cnae") {
       if (!selectedCnae) { toast.error("Selecione um CNAE"); return; }
       setTrigger({ type: "cnae", value: selectedCnae, portaria: selectedPortaria, estado: selectedEstado });
       toast.info(`Buscando empresas com CNAE ${selectedCnae} em ${selectedEstado}...`);
+    } else {
+      const k = keyword.trim();
+      if (k.length < 3) { toast.error("Digite ao menos 3 caracteres"); return; }
+      setTrigger({ type: "palavra", value: k, portaria: selectedPortaria, estado: selectedEstado });
+      toast.info(`Buscando "${k}" em ${selectedEstado}...`);
     }
   };
 
