@@ -237,6 +237,29 @@ export default function Certificacao() {
         </Button>
       </div>
 
+      {/* Importador por colagem (INMETRO Prodcert) */}
+      <div className="bento-card">
+        <h3 className="text-sm font-heading font-semibold mb-2 flex items-center gap-2">
+          <ClipboardPaste className="h-4 w-4" />Importar por colagem (INMETRO Prodcert)
+        </h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Cole as linhas copiadas da tabela do <a href="http://www.inmetro.gov.br/prodcert/" target="_blank" rel="noopener" className="text-primary underline">Prodcert</a>.
+          O sistema detecta automaticamente CNPJ, número do certificado, razão social e data de validade (dd/mm/aaaa).
+          Linhas sem data de validade são ignoradas. Certificados com mesmo número são atualizados.
+          Portaria atual: <strong>{form.portaria}</strong>.
+        </p>
+        <Textarea
+          value={pasteText}
+          onChange={e => setPasteText(e.target.value)}
+          placeholder={"Ex: SCITEC-145-001\t12.345.678/0001-99\tEmpresa XYZ Ltda\t31/12/2025\nSCITEC-145-002\t98.765.432/0001-11\tOutra Empresa SA\t15/06/2026"}
+          className="min-h-[140px] font-mono text-xs"
+        />
+        <Button onClick={handleImportPaste} disabled={importing} className="mt-3 gap-2">
+          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardPaste className="h-4 w-4" />}
+          Importar dados colados
+        </Button>
+      </div>
+
       <div className="bento-card">
         <div className="flex flex-wrap gap-2 mb-4">
           <Button size="sm" variant={filterPortaria === "todas" ? "default" : "outline"} onClick={() => setFilterPortaria("todas")} className="text-xs">Todas ({all.length})</Button>
