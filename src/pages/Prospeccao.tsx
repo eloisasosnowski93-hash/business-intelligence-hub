@@ -329,14 +329,17 @@ export default function Prospeccao() {
           <div className="bento-card">
             <h3 className="text-sm font-heading font-semibold mb-1">🌐 Buscar Novas Empresas — Receita Federal</h3>
             <p className="text-xs text-muted-foreground mb-4">
-              Dados oficiais via OpenCNPJ e CNPJá. Por CNPJ: dados completos + sócios. Por CNAE: lista empresas ativas do setor por estado.
+              Dados oficiais via OpenCNPJ e CNPJá. Por CNPJ: dados completos + sócios. Por CNAE ou Palavra-chave: lista empresas ativas por estado.
             </p>
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4 flex-wrap">
               <Button variant={searchType === "cnpj" ? "default" : "outline"} size="sm" onClick={() => setSearchType("cnpj")}>
                 <Building2 className="h-4 w-4 mr-1" />Por CNPJ
               </Button>
               <Button variant={searchType === "cnae" ? "default" : "outline"} size="sm" onClick={() => setSearchType("cnae")}>
                 <FileText className="h-4 w-4 mr-1" />Por CNAE + Estado
+              </Button>
+              <Button variant={searchType === "palavra" ? "default" : "outline"} size="sm" onClick={() => setSearchType("palavra")}>
+                <Search className="h-4 w-4 mr-1" />Palavra-chave + Estado
               </Button>
             </div>
 
@@ -348,7 +351,7 @@ export default function Prospeccao() {
                     onChange={e => setCnpjInput(formatCnpj(e.target.value))}
                     onKeyDown={e => e.key === "Enter" && handleSearch()} />
                 </div>
-              ) : (
+              ) : searchType === "cnae" ? (
                 <>
                   <div>
                     <label className="text-xs text-muted-foreground mb-1 block">CNAE do setor</label>
@@ -366,8 +369,24 @@ export default function Prospeccao() {
                     </select>
                   </div>
                 </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Palavra-chave (razão social)</label>
+                    <Input placeholder="Ex: laboratório, automotivo, hospital..."
+                      value={keyword} onChange={e => setKeyword(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleSearch()} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Estado</label>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={selectedEstado} onChange={e => setSelectedEstado(e.target.value)}>
+                      {ESTADOS_BR.map(e => <option key={e.code} value={e.code}>{e.label}</option>)}
+                    </select>
+                  </div>
+                </>
               )}
-              <div className={`flex items-end ${searchType === "cnpj" ? "" : ""}`}>
+              <div className="flex items-end">
                 <Button onClick={handleSearch} disabled={isLoading} className="w-full gap-2">
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                   {isLoading ? "Buscando..." : "Buscar"}
@@ -376,15 +395,15 @@ export default function Prospeccao() {
             </div>
           </div>
 
-          {(cnpjQuery.error || cnaeQuery.error) && (
+          {(cnpjQuery.error || cnaeQuery.error || keywordQuery.error) && (
             <div className="bento-card border-l-4 border-l-destructive">
               <div className="flex items-start gap-2 text-destructive">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">{(cnpjQuery.error as Error)?.message || (cnaeQuery.error as Error)?.message}</p>
+                  <p className="text-sm font-medium">{(cnpjQuery.error as Error)?.message || (cnaeQuery.error as Error)?.message || (keywordQuery.error as Error)?.message}</p>
                   {searchType === "cnae" && (
                     <p className="text-xs mt-1 text-muted-foreground">
-                      💡 Alternativa: baixe uma lista em <a href="https://casadosdados.com.br" target="_blank" className="underline">casadosdados.com.br</a> ou <a href="https://cnpj.biz" target="_blank" className="underline">cnpj.biz</a> e importe via CSV no CRM.
+                      💡 Tente a busca por <strong>Palavra-chave + Estado</strong>, ou baixe listas em <a href="https://casadosdados.com.br" target="_blank" className="underline">casadosdados.com.br</a>.
                     </p>
                   )}
                 </div>
@@ -392,8 +411,8 @@ export default function Prospeccao() {
             </div>
           )}
 
-          {/* RESULTADOS CNAE */}
-          {cnaeResult && trigger?.type === "cnae" && (() => {
+          {/* RESULTADOS CNAE / PALAVRA-CHAVE */}
+          {cnaeResult && (trigger?.type === "cnae" || trigger?.type === "palavra") && (() => {
             const visibleEmpresas = cnaeResult.empresas.filter((emp: any) => {
               if (!hideCertified) return true;
               const cnpj = emp.cnpj || emp.office?.cnpj || "";
