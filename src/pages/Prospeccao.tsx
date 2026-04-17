@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useUnit } from "@/contexts/UnitContext";
 import { useQuery } from "@tanstack/react-query";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useSearchLeads, CATEGORIA_LABELS, PORTARIA_TO_CATEGORIA } from "@/hooks/useLeads";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -96,6 +98,19 @@ export default function Prospeccao() {
   const [selectedEstado, setSelectedEstado] = useState("SP");
   const [trigger, setTrigger] = useState<{ type: string; value: string; portaria: string; estado?: string } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [hideCertified, setHideCertified] = useState(false);
+
+  // OCP cross-reference: load certified CNPJs from `certificados` table
+  const { data: certificados } = useQuery({
+    queryKey: ["certificados-cnpjs"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("certificados").select("cnpj_empresa");
+      if (error) throw error;
+      return new Set((data || []).map((c: any) => (c.cnpj_empresa || "").replace(/\D/g, "")).filter(Boolean));
+    },
+    enabled: unit === "ocp",
+  });
+  const isCertified = (cnpj: string) => unit === "ocp" && certificados?.has((cnpj || "").replace(/\D/g, ""));
 
   const portarias = unit === "lab" ? PORTARIAS_LAB : PORTARIAS_OCP;
   const cnaes = unit === "lab" ? CNAES_LAB : CNAES_OCP;
@@ -347,14 +362,31 @@ export default function Prospeccao() {
           )}
 
           {/* RESULTADOS CNAE */}
-          {cnaeResult && trigger?.type === "cnae" && (
+          {cnaeResult && trigger?.type === "cnae" && (() => {
+            const visibleEmpresas = cnaeResult.empresas.filter((emp: any) => {
+              if (!hideCertified) return true;
+              const cnpj = emp.cnpj || emp.office?.cnpj || "";
+              return !isCertified(cnpj);
+            });
+            const certifiedCount = cnaeResult.empresas.length - visibleEmpresas.length;
+            return (
             <div className="bento-card">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <h3 className="text-sm font-heading font-semibold">
                   🏭 Empresas encontradas — {cnaeResult.source}
                   {cnaeResult.total && <span className="text-muted-foreground font-normal ml-1">({cnaeResult.total} total)</span>}
                 </h3>
-                <Badge variant="secondary">{cnaeResult.empresas.length} exibidas</Badge>
+                <div className="flex items-center gap-3">
+                  {unit === "ocp" && (
+                    <div className="flex items-center gap-2">
+                      <Switch id="hide-cert" checked={hideCertified} onCheckedChange={setHideCertified} />
+                      <Label htmlFor="hide-cert" className="text-xs cursor-pointer">
+                        Ocultar já certificados {certifiedCount > 0 && `(${certifiedCount})`}
+                      </Label>
+                    </div>
+                  )}
+                  <Badge variant="secondary">{visibleEmpresas.length} exibidas</Badge>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <Table>
@@ -364,7 +396,7 @@ export default function Prospeccao() {
                     <TableHead>Situação</TableHead><TableHead>Ação</TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
-                    {cnaeResult.empresas.map((emp: any, i: number) => {
+                    {visibleEmpresas.map((emp: any, i: number) => {
                       const nome = emp.razao_social || emp.company?.name || emp.office?.alias || "—";
                       const cnpj = emp.cnpj || emp.office?.cnpj || "—";
                       const email = emp.email || emp.company?.email || null;
@@ -373,10 +405,14 @@ export default function Prospeccao() {
                       const uf = emp.uf || emp.office?.address?.state || "—";
                       const situacao = emp.situacao_cadastral || "Ativa";
                       const cnaeCode = emp.cnae_principal || emp.cnae_fiscal;
+                      const certified = isCertified(cnpj);
                       return (
-                        <TableRow key={i} className="hover:bg-muted/50">
+                        <TableRow key={i} className={`hover:bg-muted/50 ${certified ? "bg-green-50/60" : ""}`}>
                           <TableCell>
-                            <p className="font-medium text-sm">{nome}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm">{nome}</p>
+                              {certified && <Badge className="bg-green-100 text-green-700 border-green-200 text-[10px] hover:bg-green-100">✓ Cliente Ativo</Badge>}
+                            </div>
                             <p className="text-[10px] text-muted-foreground font-mono">{cnpj}</p>
                           </TableCell>
                           <TableCell><Badge variant="outline" className="text-[10px]">{cnaeCode}</Badge></TableCell>
@@ -400,7 +436,8 @@ export default function Prospeccao() {
                 </Table>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* RESULTADO CNPJ */}
           {cnpjResult && trigger?.type === "cnpj" && (
