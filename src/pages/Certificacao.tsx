@@ -52,6 +52,8 @@ export default function Certificacao() {
   const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [filterPortaria, setFilterPortaria] = useState<string>(initialFilter);
+  const [pasteText, setPasteText] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const { data: certs, isLoading } = useQuery<Certificado[]>({
     queryKey: ["certificados"],
