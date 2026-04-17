@@ -177,25 +177,30 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground">Buscar leads por CNPJ/CNAE</p>
               </div>
             </button>
-            <button onClick={() => navigate("/crm")} className="w-full flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left">
-              <Users className="h-4 w-4 text-primary" />
-              <div>
-                <p className="text-sm font-medium text-foreground">CRM Leads</p>
-                <p className="text-xs text-muted-foreground">{stats?.total || 0} leads cadastrados</p>
-              </div>
-            </button>
-            <button onClick={() => navigate("/endotoxina")} className="w-full flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left">
-              <Zap className="h-4 w-4 text-accent" />
-              <div>
-                <p className="text-sm font-medium text-foreground">Endotoxina & Esterilidade</p>
-                <p className="text-xs text-muted-foreground">{stats?.byCategoria?.endotoxina_esterilidade || 0} leads</p>
-              </div>
-            </button>
+            {unit === "lab" && (
+              <button onClick={() => navigate("/endotoxina")} className="w-full flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left">
+                <Zap className="h-4 w-4 text-accent" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Endotoxina & Esterilidade</p>
+                  <p className="text-xs text-muted-foreground">{stats?.byCategoria?.endotoxina_esterilidade || 0} leads</p>
+                </div>
+              </button>
+            )}
+            {unit === "ocp" && (
+              <button onClick={() => navigate("/certificacao")} className="w-full flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors text-left">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Certificação OCP</p>
+                  <p className="text-xs text-muted-foreground">Gestão de certificados e vencimentos</p>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Leads Table */}
+      {/* Leads Table — Lab only */}
+      {unit === "lab" && (
       <div className="bento-card">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <h3 className="text-sm font-heading font-semibold text-foreground">
@@ -255,6 +260,7 @@ export default function Dashboard() {
           <div className="py-12 text-center text-muted-foreground">Nenhum lead encontrado.</div>
         )}
       </div>
+      )}
     </div>
   );
 }
