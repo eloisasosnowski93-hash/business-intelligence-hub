@@ -232,9 +232,9 @@ export default function Prospeccao() {
     finally { setSavingId(null); }
   };
 
-  const isLoading = cnpjQuery.isFetching || cnaeQuery.isFetching;
+  const isLoading = cnpjQuery.isFetching || cnaeQuery.isFetching || keywordQuery.isFetching;
   const cnpjResult = cnpjQuery.data;
-  const cnaeResult = cnaeQuery.data;
+  const cnaeResult = cnaeQuery.data || keywordQuery.data;
 
   const formatCnpj = (v: string) => {
     const d = v.replace(/\D/g, "").slice(0, 14);
