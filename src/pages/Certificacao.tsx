@@ -100,6 +100,71 @@ export default function Certificacao() {
     } finally { setSyncing(false); }
   };
 
+  // Parse colado do INMETRO Prodcert: cada linha = 1 certificado
+  // Heurística: detecta CNPJ (14 dígitos), data dd/mm/yyyy, número de certificado, razão social
+  const parsePastedRows = (text: string) => {
+    const rows: any[] = [];
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const cnpjRe = /\b(\d{2}[.\-/]?\d{3}[.\-/]?\d{3}[.\-/]?\d{4}[.\-/]?\d{2})\b/;
+    const dateRe = /\b(\d{2})[\/\-](\d{2})[\/\-](\d{4})\b/;
+    const certRe = /\b([A-Z0-9]{2,}[-\/.][A-Z0-9\-\/.]{3,})\b/;
+
+    for (const line of lines) {
+      // Linha pode usar TAB, ; ou múltiplos espaços como separador
+      const parts = line.split(/\t|;|\s{2,}/).map(p => p.trim()).filter(Boolean);
+      const joined = line;
+
+      const cnpjMatch = joined.match(cnpjRe);
+      const dateMatch = joined.match(dateRe);
+      if (!dateMatch) continue; // sem validade, pula
+
+      const cnpj = cnpjMatch ? cnpjMatch[1].replace(/\D/g, "") : null;
+      const dataValidade = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+
+      // numero_certificado: primeiro token que parece código (com letras+números/traço)
+      let numero = parts.find(p => certRe.test(p) && !cnpjRe.test(p) && !dateRe.test(p));
+      if (!numero) {
+        // fallback: primeiro token alfanumérico não-data, não-cnpj
+        numero = parts.find(p => /[A-Z0-9]/i.test(p) && !cnpjRe.test(p) && !dateRe.test(p)) || `IMPORT-${Date.now()}-${rows.length}`;
+      }
+
+      // razão social: maior token alfabético restante
+      const razao = parts
+        .filter(p => p !== numero && !cnpjRe.test(p) && !dateRe.test(p))
+        .sort((a, b) => b.length - a.length)[0] || null;
+
+      rows.push({
+        numero_certificado: numero,
+        cnpj_empresa: cnpj,
+        razao_social: razao,
+        data_validade: dataValidade,
+        portaria: form.portaria,
+        status_registro: "ativo",
+      });
+    }
+    return rows;
+  };
+
+  const handleImportPaste = async () => {
+    if (!pasteText.trim()) { toast.error("Cole os dados do INMETRO primeiro"); return; }
+    setImporting(true);
+    try {
+      const rows = parsePastedRows(pasteText);
+      if (!rows.length) {
+        toast.error("Nenhuma linha válida detectada (verifique se há datas dd/mm/yyyy)");
+        return;
+      }
+      const { error } = await supabase.from("certificados").upsert(rows, { onConflict: "numero_certificado" });
+      if (error) throw error;
+      toast.success(`${rows.length} certificado(s) importado(s)!`);
+      setPasteText("");
+      qc.invalidateQueries({ queryKey: ["certificados"] });
+      qc.invalidateQueries({ queryKey: ["cert-alerts-90d"] });
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao importar");
+    } finally { setImporting(false); }
+  };
+
   const all = certs || [];
   const vencidos = all.filter(c => diasParaVencer(c.data_validade) < 0);
   const criticos90 = all.filter(c => { const d = diasParaVencer(c.data_validade); return d >= 0 && d <= 90; });
