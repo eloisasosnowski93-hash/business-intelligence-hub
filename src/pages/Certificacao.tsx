@@ -3,9 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ShieldCheck, Plus, Bell, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink } from "lucide-react";
+import { ShieldCheck, Plus, Bell, AlertTriangle, CheckCircle, Loader2, RefreshCw, ExternalLink, ClipboardPaste } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -51,6 +52,8 @@ export default function Certificacao() {
   const [adding, setAdding] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [filterPortaria, setFilterPortaria] = useState<string>(initialFilter);
+  const [pasteText, setPasteText] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const { data: certs, isLoading } = useQuery<Certificado[]>({
     queryKey: ["certificados"],
@@ -95,6 +98,71 @@ export default function Certificacao() {
     } catch (e: any) {
       toast.error(e.message || "Erro ao sincronizar com INMETRO");
     } finally { setSyncing(false); }
+  };
+
+  // Parse colado do INMETRO Prodcert: cada linha = 1 certificado
+  // Heurística: detecta CNPJ (14 dígitos), data dd/mm/yyyy, número de certificado, razão social
+  const parsePastedRows = (text: string) => {
+    const rows: any[] = [];
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const cnpjRe = /\b(\d{2}[.\-/]?\d{3}[.\-/]?\d{3}[.\-/]?\d{4}[.\-/]?\d{2})\b/;
+    const dateRe = /\b(\d{2})[\/\-](\d{2})[\/\-](\d{4})\b/;
+    const certRe = /\b([A-Z0-9]{2,}[-\/.][A-Z0-9\-\/.]{3,})\b/;
+
+    for (const line of lines) {
+      // Linha pode usar TAB, ; ou múltiplos espaços como separador
+      const parts = line.split(/\t|;|\s{2,}/).map(p => p.trim()).filter(Boolean);
+      const joined = line;
+
+      const cnpjMatch = joined.match(cnpjRe);
+      const dateMatch = joined.match(dateRe);
+      if (!dateMatch) continue; // sem validade, pula
+
+      const cnpj = cnpjMatch ? cnpjMatch[1].replace(/\D/g, "") : null;
+      const dataValidade = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+
+      // numero_certificado: primeiro token que parece código (com letras+números/traço)
+      let numero = parts.find(p => certRe.test(p) && !cnpjRe.test(p) && !dateRe.test(p));
+      if (!numero) {
+        // fallback: primeiro token alfanumérico não-data, não-cnpj
+        numero = parts.find(p => /[A-Z0-9]/i.test(p) && !cnpjRe.test(p) && !dateRe.test(p)) || `IMPORT-${Date.now()}-${rows.length}`;
+      }
+
+      // razão social: maior token alfabético restante
+      const razao = parts
+        .filter(p => p !== numero && !cnpjRe.test(p) && !dateRe.test(p))
+        .sort((a, b) => b.length - a.length)[0] || null;
+
+      rows.push({
+        numero_certificado: numero,
+        cnpj_empresa: cnpj,
+        razao_social: razao,
+        data_validade: dataValidade,
+        portaria: form.portaria,
+        status_registro: "ativo",
+      });
+    }
+    return rows;
+  };
+
+  const handleImportPaste = async () => {
+    if (!pasteText.trim()) { toast.error("Cole os dados do INMETRO primeiro"); return; }
+    setImporting(true);
+    try {
+      const rows = parsePastedRows(pasteText);
+      if (!rows.length) {
+        toast.error("Nenhuma linha válida detectada (verifique se há datas dd/mm/yyyy)");
+        return;
+      }
+      const { error } = await supabase.from("certificados").upsert(rows, { onConflict: "numero_certificado" });
+      if (error) throw error;
+      toast.success(`${rows.length} certificado(s) importado(s)!`);
+      setPasteText("");
+      qc.invalidateQueries({ queryKey: ["certificados"] });
+      qc.invalidateQueries({ queryKey: ["cert-alerts-90d"] });
+    } catch (e: any) {
+      toast.error(e.message || "Erro ao importar");
+    } finally { setImporting(false); }
   };
 
   const all = certs || [];
@@ -166,6 +234,29 @@ export default function Certificacao() {
         <Button onClick={handleAdd} disabled={adding} className="mt-3 gap-2">
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
           Cadastrar
+        </Button>
+      </div>
+
+      {/* Importador por colagem (INMETRO Prodcert) */}
+      <div className="bento-card">
+        <h3 className="text-sm font-heading font-semibold mb-2 flex items-center gap-2">
+          <ClipboardPaste className="h-4 w-4" />Importar por colagem (INMETRO Prodcert)
+        </h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Cole as linhas copiadas da tabela do <a href="http://www.inmetro.gov.br/prodcert/" target="_blank" rel="noopener" className="text-primary underline">Prodcert</a>.
+          O sistema detecta automaticamente CNPJ, número do certificado, razão social e data de validade (dd/mm/aaaa).
+          Linhas sem data de validade são ignoradas. Certificados com mesmo número são atualizados.
+          Portaria atual: <strong>{form.portaria}</strong>.
+        </p>
+        <Textarea
+          value={pasteText}
+          onChange={e => setPasteText(e.target.value)}
+          placeholder={"Ex: SCITEC-145-001\t12.345.678/0001-99\tEmpresa XYZ Ltda\t31/12/2025\nSCITEC-145-002\t98.765.432/0001-11\tOutra Empresa SA\t15/06/2026"}
+          className="min-h-[140px] font-mono text-xs"
+        />
+        <Button onClick={handleImportPaste} disabled={importing} className="mt-3 gap-2">
+          {importing ? <Loader2 className="h-4 w-4 animate-spin" /> : <ClipboardPaste className="h-4 w-4" />}
+          Importar dados colados
         </Button>
       </div>
 

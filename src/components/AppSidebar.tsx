@@ -5,11 +5,12 @@ import {
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Search, FileBarChart, ShieldCheck, Beaker, Settings } from "lucide-react";
+import { LayoutDashboard, Search, FileBarChart, ShieldCheck, Beaker, Settings, Zap } from "lucide-react";
 
 const labItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Prospecção", url: "/prospeccao", icon: Search },
+  { title: "Endotoxina & Esterilidade", url: "/endotoxina", icon: Zap },
   { title: "Relatórios", url: "/relatorios", icon: FileBarChart },
   { title: "Configurações", url: "/configuracoes", icon: Settings },
 ];

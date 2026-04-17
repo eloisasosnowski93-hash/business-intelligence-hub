@@ -92,10 +92,11 @@ export default function Prospeccao() {
   const [searchTab, setSearchTab] = useState<"interno" | "externo">("interno");
   const [internalSearch, setInternalSearch] = useState("");
   const [selectedPortaria, setSelectedPortaria] = useState(unit === "lab" ? "endotoxina" : "145/2022");
-  const [searchType, setSearchType] = useState<"cnpj" | "cnae">("cnpj");
+  const [searchType, setSearchType] = useState<"cnpj" | "cnae" | "palavra">("cnpj");
   const [cnpjInput, setCnpjInput] = useState("");
   const [selectedCnae, setSelectedCnae] = useState("");
   const [selectedEstado, setSelectedEstado] = useState("SP");
+  const [keyword, setKeyword] = useState("");
   const [trigger, setTrigger] = useState<{ type: string; value: string; portaria: string; estado?: string } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [hideCertified, setHideCertified] = useState(false);
@@ -163,15 +164,45 @@ export default function Prospeccao() {
     staleTime: 1000 * 60 * 30,
   });
 
+  // Busca por palavra-chave + estado (fallback quando CNAE falha)
+  const keywordQuery = useQuery({
+    queryKey: ["keyword-search", trigger],
+    queryFn: async () => {
+      const q = trigger!.value;
+      const uf = trigger!.estado || "SP";
+      // OpenCNPJ search por razão social
+      const res = await fetch(`https://api.opencnpj.org/search?razao_social=${encodeURIComponent(q)}&uf=${uf}&situacao_cadastral=Ativa&limit=20`);
+      if (res.ok) {
+        const d = await res.json();
+        if (d?.data?.length > 0) return { empresas: d.data, source: "OpenCNPJ", total: d.total };
+      }
+      // Fallback CNPJá — busca por nome
+      const res2 = await fetch(`https://open.cnpja.com/office?search=${encodeURIComponent(q)}&uf=${uf}&limit=20`);
+      if (res2.ok) {
+        const d2 = await res2.json();
+        if (d2?.records?.length > 0) return { empresas: d2.records, source: "CNPJá", total: d2.total };
+      }
+      throw new Error(`Nenhuma empresa encontrada para "${q}" em ${uf}.`);
+    },
+    enabled: !!trigger && trigger.type === "palavra",
+    retry: 0,
+    staleTime: 1000 * 60 * 30,
+  });
+
   const handleSearch = () => {
     if (searchType === "cnpj") {
       const clean = cnpjInput.replace(/\D/g, "");
       if (clean.length !== 14) { toast.error("CNPJ deve ter 14 dígitos"); return; }
       setTrigger({ type: "cnpj", value: clean, portaria: selectedPortaria });
-    } else {
+    } else if (searchType === "cnae") {
       if (!selectedCnae) { toast.error("Selecione um CNAE"); return; }
       setTrigger({ type: "cnae", value: selectedCnae, portaria: selectedPortaria, estado: selectedEstado });
       toast.info(`Buscando empresas com CNAE ${selectedCnae} em ${selectedEstado}...`);
+    } else {
+      const k = keyword.trim();
+      if (k.length < 3) { toast.error("Digite ao menos 3 caracteres"); return; }
+      setTrigger({ type: "palavra", value: k, portaria: selectedPortaria, estado: selectedEstado });
+      toast.info(`Buscando "${k}" em ${selectedEstado}...`);
     }
   };
 
@@ -201,9 +232,9 @@ export default function Prospeccao() {
     finally { setSavingId(null); }
   };
 
-  const isLoading = cnpjQuery.isFetching || cnaeQuery.isFetching;
+  const isLoading = cnpjQuery.isFetching || cnaeQuery.isFetching || keywordQuery.isFetching;
   const cnpjResult = cnpjQuery.data;
-  const cnaeResult = cnaeQuery.data;
+  const cnaeResult = cnaeQuery.data || keywordQuery.data;
 
   const formatCnpj = (v: string) => {
     const d = v.replace(/\D/g, "").slice(0, 14);
@@ -298,14 +329,17 @@ export default function Prospeccao() {
           <div className="bento-card">
             <h3 className="text-sm font-heading font-semibold mb-1">🌐 Buscar Novas Empresas — Receita Federal</h3>
             <p className="text-xs text-muted-foreground mb-4">
-              Dados oficiais via OpenCNPJ e CNPJá. Por CNPJ: dados completos + sócios. Por CNAE: lista empresas ativas do setor por estado.
+              Dados oficiais via OpenCNPJ e CNPJá. Por CNPJ: dados completos + sócios. Por CNAE ou Palavra-chave: lista empresas ativas por estado.
             </p>
-            <div className="flex gap-2 mb-4">
+            <div className="flex gap-2 mb-4 flex-wrap">
               <Button variant={searchType === "cnpj" ? "default" : "outline"} size="sm" onClick={() => setSearchType("cnpj")}>
                 <Building2 className="h-4 w-4 mr-1" />Por CNPJ
               </Button>
               <Button variant={searchType === "cnae" ? "default" : "outline"} size="sm" onClick={() => setSearchType("cnae")}>
                 <FileText className="h-4 w-4 mr-1" />Por CNAE + Estado
+              </Button>
+              <Button variant={searchType === "palavra" ? "default" : "outline"} size="sm" onClick={() => setSearchType("palavra")}>
+                <Search className="h-4 w-4 mr-1" />Palavra-chave + Estado
               </Button>
             </div>
 
@@ -317,7 +351,7 @@ export default function Prospeccao() {
                     onChange={e => setCnpjInput(formatCnpj(e.target.value))}
                     onKeyDown={e => e.key === "Enter" && handleSearch()} />
                 </div>
-              ) : (
+              ) : searchType === "cnae" ? (
                 <>
                   <div>
                     <label className="text-xs text-muted-foreground mb-1 block">CNAE do setor</label>
@@ -335,8 +369,24 @@ export default function Prospeccao() {
                     </select>
                   </div>
                 </>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Palavra-chave (razão social)</label>
+                    <Input placeholder="Ex: laboratório, automotivo, hospital..."
+                      value={keyword} onChange={e => setKeyword(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleSearch()} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">Estado</label>
+                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={selectedEstado} onChange={e => setSelectedEstado(e.target.value)}>
+                      {ESTADOS_BR.map(e => <option key={e.code} value={e.code}>{e.label}</option>)}
+                    </select>
+                  </div>
+                </>
               )}
-              <div className={`flex items-end ${searchType === "cnpj" ? "" : ""}`}>
+              <div className="flex items-end">
                 <Button onClick={handleSearch} disabled={isLoading} className="w-full gap-2">
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                   {isLoading ? "Buscando..." : "Buscar"}
@@ -345,15 +395,15 @@ export default function Prospeccao() {
             </div>
           </div>
 
-          {(cnpjQuery.error || cnaeQuery.error) && (
+          {(cnpjQuery.error || cnaeQuery.error || keywordQuery.error) && (
             <div className="bento-card border-l-4 border-l-destructive">
               <div className="flex items-start gap-2 text-destructive">
                 <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">{(cnpjQuery.error as Error)?.message || (cnaeQuery.error as Error)?.message}</p>
+                  <p className="text-sm font-medium">{(cnpjQuery.error as Error)?.message || (cnaeQuery.error as Error)?.message || (keywordQuery.error as Error)?.message}</p>
                   {searchType === "cnae" && (
                     <p className="text-xs mt-1 text-muted-foreground">
-                      💡 Alternativa: baixe uma lista em <a href="https://casadosdados.com.br" target="_blank" className="underline">casadosdados.com.br</a> ou <a href="https://cnpj.biz" target="_blank" className="underline">cnpj.biz</a> e importe via CSV no CRM.
+                      💡 Tente a busca por <strong>Palavra-chave + Estado</strong>, ou baixe listas em <a href="https://casadosdados.com.br" target="_blank" className="underline">casadosdados.com.br</a>.
                     </p>
                   )}
                 </div>
@@ -361,8 +411,8 @@ export default function Prospeccao() {
             </div>
           )}
 
-          {/* RESULTADOS CNAE */}
-          {cnaeResult && trigger?.type === "cnae" && (() => {
+          {/* RESULTADOS CNAE / PALAVRA-CHAVE */}
+          {cnaeResult && (trigger?.type === "cnae" || trigger?.type === "palavra") && (() => {
             const visibleEmpresas = cnaeResult.empresas.filter((emp: any) => {
               if (!hideCertified) return true;
               const cnpj = emp.cnpj || emp.office?.cnpj || "";
