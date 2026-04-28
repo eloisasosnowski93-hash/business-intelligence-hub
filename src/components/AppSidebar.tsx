@@ -1,3 +1,4 @@
+cat > src/components/AppSidebar.tsx << 'EOFILE'
 import { useUnit } from "@/contexts/UnitContext";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -5,28 +6,21 @@ import {
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, Search, Users, FileBarChart, Zap, FlaskConical, ShieldCheck, Beaker, Settings, Sparkles } from "lucide-react";
+import { LayoutDashboard, Search, FileBarChart, ShieldCheck, Beaker, Settings } from "lucide-react";
 
 const labItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Prospecção Lab", url: "/prospeccao", icon: Search },
-  { title: "Endotoxina & Esterilidade", url: "/endotoxina", icon: FlaskConical },
-  { title: "Motor de Busca", url: "/motor-busca", icon: Sparkles },
-  { title: "Enriquecimento", url: "/enriquecimento", icon: Zap },
-  { title: "CRM Leads", url: "/crm", icon: Users },
-  { title: "Relatórios", url: "/relatorios", icon: FileBarChart },
-  { title: "Configurações", url: "/configuracoes", icon: Settings },
+  { title: "Dashboard",      url: "/",             icon: LayoutDashboard },
+  { title: "Prospecção Lab", url: "/prospeccao",   icon: Search },
+  { title: "Relatórios",     url: "/relatorios",   icon: FileBarChart },
+  { title: "Configurações",  url: "/configuracoes", icon: Settings },
 ];
 
 const ocpItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Prospecção OCP", url: "/prospeccao", icon: Search },
+  { title: "Dashboard",        url: "/",             icon: LayoutDashboard },
+  { title: "Prospecção OCP",   url: "/prospeccao",   icon: Search },
   { title: "Certificação OCP", url: "/certificacao", icon: ShieldCheck },
-  { title: "Motor de Busca", url: "/motor-busca", icon: Sparkles },
-  { title: "Enriquecimento", url: "/enriquecimento", icon: Zap },
-  { title: "CRM Leads", url: "/crm", icon: Users },
-  { title: "Relatórios", url: "/relatorios", icon: FileBarChart },
-  { title: "Configurações", url: "/configuracoes", icon: Settings },
+  { title: "Relatórios",       url: "/relatorios",   icon: FileBarChart },
+  { title: "Configurações",    url: "/configuracoes", icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -95,6 +89,7 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+
       <SidebarFooter>
         {!collapsed && (
           <div className="p-4 pt-2">
@@ -107,3 +102,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+EOFILE

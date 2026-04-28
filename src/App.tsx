@@ -1,3 +1,4 @@
+cat > src/App.tsx << 'EOFILE'
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -7,12 +8,8 @@ import { UnitProvider } from "@/contexts/UnitContext";
 import { AppLayout } from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Prospeccao from "@/pages/Prospeccao";
-import CrmLeads from "@/pages/CrmLeads";
-import Endotoxina from "@/pages/Endotoxina";
-import Enriquecimento from "@/pages/Enriquecimento";
 import Relatorios from "@/pages/Relatorios";
 import Certificacao from "@/pages/Certificacao";
-import MotorBusca from "@/pages/MotorBusca";
 import Configuracoes from "@/pages/Configuracoes";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -29,12 +26,8 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/prospeccao" element={<Prospeccao />} />
-              <Route path="/crm" element={<CrmLeads />} />
-              <Route path="/endotoxina" element={<Endotoxina />} />
-              <Route path="/enriquecimento" element={<Enriquecimento />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/certificacao" element={<Certificacao />} />
-              <Route path="/motor-busca" element={<MotorBusca />} />
               <Route path="/configuracoes" element={<Configuracoes />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
@@ -46,3 +39,4 @@ const App = () => (
 );
 
 export default App;
+EOFILE

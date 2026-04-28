@@ -1,138 +1,178 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+cat > src/pages/Configuracoes.tsx << 'EOFILE'
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Save, CheckCircle, Mail, User } from "lucide-react";
-import { toast } from "sonner";
+import { Eye, EyeOff, CheckCircle, XCircle, ExternalLink, Save } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
-const AREAS_LAB = [
-  { key: "portaria_145_2022", label: "Portaria 145/2022 — Componentes Automotivos", sugestoes: ["Eloisa"] },
-  { key: "endotoxina_esterilidade", label: "Endotoxina & Esterilidade", sugestoes: ["Kevin"] },
-  { key: "mri_iso10993", label: "MRI & ISO 10993/18", sugestoes: ["Ana Beatriz", "Kevin"] },
-];
+const API_CONFIGS = {
+  SERPER_API_KEY: {
+    label: "Serper.dev — Google Search API",
+    description: "Busca o site oficial da empresa no Google.",
+    freePlan: "2.500 buscas/mês grátis",
+    signupUrl: "https://serper.dev",
+    docsUrl: "https://serper.dev/api-reference",
+    placeholder: "sua_chave_serper...",
+  },
+  HUNTER_API_KEY: {
+    label: "Hunter.io — Email Finder",
+    description: "Encontra e valida emails corporativos por domínio da empresa.",
+    freePlan: "25 buscas/mês grátis",
+    signupUrl: "https://hunter.io/users/sign_up",
+    docsUrl: "https://hunter.io/api-documentation",
+    placeholder: "sua_chave_hunter...",
+  },
+  APOLLO_API_KEY: {
+    label: "Apollo.io — B2B Contact Search",
+    description: "Encontra decisores por cargo (Qualidade, Regulatório, P&D, Compras).",
+    freePlan: "10.000 créditos/mês grátis",
+    signupUrl: "https://app.apollo.io/#/sign-up",
+    docsUrl: "https://apolloio.github.io/apollo-api-docs",
+    placeholder: "sua_chave_apollo...",
+  },
+  BACKEND_URL: {
+    label: "URL do Backend (Railway)",
+    description: "URL da API backend que processa as buscas.",
+    freePlan: "Gratuito até 500 horas/mês",
+    signupUrl: "https://railway.app",
+    docsUrl: "https://docs.railway.app",
+    placeholder: "https://seu-backend.railway.app",
+  },
+} as const;
 
-const AREAS_OCP = [
-  { key: "portaria_384_2020", label: "Portaria 384/2020 — Equip. Vigilância Sanitária", sugestoes: ["Ana Carolina"] },
-  { key: "portaria_145_2022_ocp", label: "Portaria 145/2022 — Automotivo (OCP)", sugestoes: ["Eloisa"] },
-  { key: "portaria_071_2022", label: "Portaria 071/2022", sugestoes: ["Ana Carolina", "Eloisa"] },
-  { key: "portaria_501_2021", label: "Portaria 501/2021 — Rodas", sugestoes: ["Eloisa"] },
-];
-
-type Config = { responsavel: string; email: string };
-
-const DEFAULTS: Record<string, Config> = {
-  portaria_145_2022: { responsavel: "Eloisa", email: "" },
-  endotoxina_esterilidade: { responsavel: "Kevin", email: "" },
-  mri_iso10993: { responsavel: "Ana Beatriz", email: "" },
-  portaria_384_2020: { responsavel: "Ana Carolina", email: "" },
-  portaria_145_2022_ocp: { responsavel: "Eloisa", email: "" },
-  portaria_071_2022: { responsavel: "", email: "" },
-  portaria_501_2021: { responsavel: "", email: "" },
-};
+type ApiKey = keyof typeof API_CONFIGS;
 
 export default function Configuracoes() {
-  const [saved, setSaved] = useState(false);
-  const [configs, setConfigs] = useState<Record<string, Config>>(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem("area_config") || "{}");
-      return Object.fromEntries(Object.keys(DEFAULTS).map(k => [k, stored[k] || DEFAULTS[k]]));
-    } catch { return { ...DEFAULTS }; }
-  });
-  const [notifEmail, setNotifEmail] = useState(() => localStorage.getItem("notif_email") || "");
-  const [notifDias, setNotifDias] = useState(() => localStorage.getItem("notif_dias") || "90");
+  const { toast } = useToast();
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [visible, setVisible] = useState<Record<string, boolean>>({});
+  const [saved, setSaved] = useState<Record<string, boolean>>({});
 
-  const update = (key: string, field: keyof Config, value: string) => {
-    setConfigs(prev => ({ ...prev, [key]: { ...prev[key], [field]: value } }));
-    setSaved(false);
+  useEffect(() => {
+    const loaded: Record<string, string> = {};
+    (Object.keys(API_CONFIGS) as ApiKey[]).forEach((k) => {
+      loaded[k] = localStorage.getItem(k) || "";
+    });
+    setValues(loaded);
+  }, []);
+
+  const handleSave = (key: string) => {
+    const val = values[key]?.trim();
+    if (!val) {
+      toast({ title: "Campo vazio", description: "Digite a chave antes de salvar.", variant: "destructive" });
+      return;
+    }
+    localStorage.setItem(key, val);
+    setSaved((prev) => ({ ...prev, [key]: true }));
+    toast({ title: "Chave salva!", description: `${API_CONFIGS[key as ApiKey].label} configurada.` });
+    setTimeout(() => setSaved((prev) => ({ ...prev, [key]: false })), 3000);
   };
 
-  const handleSave = () => {
-    localStorage.setItem("area_config", JSON.stringify(configs));
-    localStorage.setItem("notif_email", notifEmail);
-    localStorage.setItem("notif_dias", notifDias);
-    setSaved(true);
-    toast.success("Configurações salvas!");
-    setTimeout(() => setSaved(false), 3000);
+  const handleClear = (key: string) => {
+    localStorage.removeItem(key);
+    setValues((prev) => ({ ...prev, [key]: "" }));
+    toast({ title: "Chave removida" });
   };
 
-  const renderArea = (area: typeof AREAS_LAB[0]) => (
-    <div key={area.key} className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-muted/40 rounded-lg">
-      <div>
-        <p className="text-sm font-medium">{area.label}</p>
-        <div className="flex flex-wrap gap-1 mt-1">
-          {area.sugestoes.map(s => (
-            <button key={s} onClick={() => update(area.key, "responsavel", s)}
-              className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <label className="text-xs text-muted-foreground mb-1 block">Responsável</label>
-        <Input value={configs[area.key]?.responsavel || ""} placeholder="Nome"
-          onChange={e => update(area.key, "responsavel", e.target.value)} />
-      </div>
-      <div>
-        <label className="text-xs text-muted-foreground mb-1 block">E-mail</label>
-        <Input value={configs[area.key]?.email || ""} placeholder="email@scitec.com.br"
-          onChange={e => update(area.key, "email", e.target.value)} />
-      </div>
-    </div>
-  );
+  const isConfigured = (key: string) => !!localStorage.getItem(key);
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold">Configurações</h1>
-          <p className="text-sm text-muted-foreground mt-1">Responsáveis por área e notificações</p>
-        </div>
-        <Button onClick={handleSave} className="gap-2">
-          {saved ? <CheckCircle className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-          {saved ? "Salvo!" : "Salvar"}
-        </Button>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
+        <p className="text-muted-foreground mt-1">Configure as chaves de API para enriquecimento automático de leads.</p>
       </div>
 
-      <div className="bento-card">
-        <h3 className="text-sm font-heading font-semibold mb-4 flex items-center gap-2">
-          <Mail className="h-4 w-4" /> Notificações de Vencimento
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">E-mail para alertas</label>
-            <Input placeholder="email@scitec.com.br" value={notifEmail} onChange={e => setNotifEmail(e.target.value)} />
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Status das Integrações</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-wrap gap-4">
+            {(Object.entries(API_CONFIGS) as [ApiKey, typeof API_CONFIGS[ApiKey]][]).map(([key, cfg]) => (
+              <div key={key} className="flex items-center gap-2">
+                {isConfigured(key)
+                  ? <CheckCircle className="h-4 w-4 text-green-500" />
+                  : <XCircle className="h-4 w-4 text-muted-foreground" />}
+                <span className="text-sm text-muted-foreground">{cfg.label.split(" — ")[0]}</span>
+              </div>
+            ))}
           </div>
-          <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Alertar com antecedência de</label>
-            <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              value={notifDias} onChange={e => setNotifDias(e.target.value)}>
-              <option value="30">30 dias</option>
-              <option value="60">60 dias</option>
-              <option value="90">90 dias (recomendado)</option>
-              <option value="180">180 dias</option>
-            </select>
-          </div>
-        </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4">
+        {(Object.entries(API_CONFIGS) as [ApiKey, typeof API_CONFIGS[ApiKey]][]).map(([key, cfg]) => (
+          <Card key={key} className={isConfigured(key) ? "border-green-500/30" : ""}>
+            <CardHeader className="pb-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <CardTitle className="text-base">{cfg.label}</CardTitle>
+                    {isConfigured(key) && (
+                      <Badge variant="outline" className="text-green-600 border-green-500 text-[10px]">Ativa</Badge>
+                    )}
+                  </div>
+                  <CardDescription>{cfg.description}</CardDescription>
+                </div>
+                <Badge variant="secondary" className="shrink-0 text-[10px]">{cfg.freePlan}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor={key} className="text-xs text-muted-foreground">Chave de API</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id={key}
+                      type={visible[key] ? "text" : "password"}
+                      placeholder={cfg.placeholder}
+                      value={values[key] || ""}
+                      onChange={(e) => setValues((prev) => ({ ...prev, [key]: e.target.value }))}
+                      className="pr-10 font-mono text-sm"
+                    />
+                    <button type="button"
+                      onClick={() => setVisible((prev) => ({ ...prev, [key]: !prev[key] }))}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                      {visible[key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  <Button size="sm" onClick={() => handleSave(key)} variant={saved[key] ? "outline" : "default"} className="gap-1.5">
+                    {saved[key] ? <CheckCircle className="h-3.5 w-3.5 text-green-500" /> : <Save className="h-3.5 w-3.5" />}
+                    {saved[key] ? "Salvo" : "Salvar"}
+                  </Button>
+                  {isConfigured(key) && (
+                    <Button size="sm" variant="ghost" onClick={() => handleClear(key)} className="text-destructive hover:text-destructive">
+                      Remover
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-1">
+                <a href={cfg.signupUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary hover:underline">
+                  <ExternalLink className="h-3 w-3" /> Criar conta gratuita
+                </a>
+                <a href={cfg.docsUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-muted-foreground hover:underline">
+                  <ExternalLink className="h-3 w-3" /> Documentação
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
-      <div className="bento-card">
-        <h3 className="text-sm font-heading font-semibold mb-4 flex items-center gap-2">
-          <User className="h-4 w-4" />
-          <Badge className="bg-red-900 text-white text-xs">Laboratório</Badge>
-          Responsáveis
-        </h3>
-        <div className="space-y-3">{AREAS_LAB.map(renderArea)}</div>
-      </div>
-
-      <div className="bento-card">
-        <h3 className="text-sm font-heading font-semibold mb-4 flex items-center gap-2">
-          <User className="h-4 w-4" />
-          <Badge className="bg-blue-900 text-white text-xs">OCP</Badge>
-          Responsáveis por Portaria
-        </h3>
-        <div className="space-y-3">{AREAS_OCP.map(renderArea)}</div>
-      </div>
+      <Card className="border-dashed">
+        <CardContent className="pt-5">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            <strong className="text-foreground">Como funciona:</strong> As chaves são salvas no navegador (localStorage).
+            Para produção, configure as variáveis de ambiente diretamente no painel do Railway.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
+EOFILE
