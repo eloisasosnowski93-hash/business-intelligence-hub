@@ -1,4 +1,3 @@
-cat > src/components/AppSidebar.tsx << 'EOFILE'
 import { useUnit } from "@/contexts/UnitContext";
 import { NavLink } from "@/components/NavLink";
 import {
@@ -108,4 +107,3 @@ export function AppSidebar() {
       </SidebarFooter>
     </Sidebar>
   );
-}
