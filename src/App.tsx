@@ -1,10 +1,8 @@
-cat > src/App.tsx << 'EOFILE'
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { UnitProvider } from "@/contexts/UnitContext";
 import { AppLayout } from "@/components/AppLayout";
 import Dashboard from "@/pages/Dashboard";
 import Prospeccao from "@/pages/Prospeccao";
@@ -20,23 +18,20 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <UnitProvider>
-        <BrowserRouter>
-          <AppLayout>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/prospeccao" element={<Prospeccao />} />
-              <Route path="/relatorios" element={<Relatorios />} />
-              <Route path="/certificacao" element={<Certificacao />} />
-              <Route path="/configuracoes" element={<Configuracoes />} />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AppLayout>
-        </BrowserRouter>
-      </UnitProvider>
+      <BrowserRouter>
+        <AppLayout>
+          <Routes>
+            <Route path="/"              element={<Dashboard />} />
+            <Route path="/prospeccao"    element={<Prospeccao />} />
+            <Route path="/relatorios"    element={<Relatorios />} />
+            <Route path="/certificacao"  element={<Certificacao />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="*"              element={<NotFound />} />
+          </Routes>
+        </AppLayout>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
 
 export default App;
-EOFILE

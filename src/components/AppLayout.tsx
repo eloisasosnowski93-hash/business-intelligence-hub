@@ -1,11 +1,9 @@
-import { useUnit } from "@/contexts/UnitContext";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { unit } = useUnit();
   return (
-    <div data-unit={unit} className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background">
       <SidebarProvider>
         <AppSidebar />
         <main className="flex-1 flex flex-col min-w-0">
