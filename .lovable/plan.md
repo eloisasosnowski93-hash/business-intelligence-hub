@@ -1,38 +1,44 @@
 
-
 ## Diagnosis
 
-The search engines don't work due to **build errors** that prevent the app from compiling. There are two root causes:
-
-1. **Certificacao.tsx** references a table `certificados_ocp` that doesn't exist in the database schema (only `leads` exists). It also uses a `Certificado` type with fields (`certificado`, `portaria`, `titular`, `validade`, `alerta_dias`) that don't match the `leads` table.
-
-2. **Relatorios.tsx** passes `title` prop to `StatCard`, but the component expects `label` instead.
-
-Additionally, the **CNAE external search** uses the BrasilAPI endpoint `/api/cnae/v2/` which returns 404 for codes with slashes/dashes (edge function logs confirm repeated 404s). The Prospeccao page itself calls BrasilAPI directly (bypassing the edge function), which is correct, but uses `/api/cnae/v2/` — the correct endpoint format needs the raw numeric code.
+The build is broken because `Certificacao.tsx` still references `certificados_ocp` (a table that doesn't exist). The DB only has `leads`. To implement the requested 90-day alert logic, cross-referencing, and INMETRO sync, I need a real `certificados` table.
 
 ## Plan
 
-### Step 1 — Fix Certificacao.tsx build errors
-Rewrite the page to remove all references to the non-existent `certificados_ocp` table. Replace with a placeholder that queries the `leads` table filtered by OCP categories, or display a "coming soon" state until a proper certificates table is created.
+### 1. Database — new `certificados` table
+Create `public.certificados` with: `id`, `numero_certificado`, `cnpj_empresa`, `razao_social`, `data_validade` (date), `status_registro`, `portaria`, `titular`, `numero_acreditacao`, `created_at`, `updated_at`. RLS: public read; insert/update via edge function (service role).
 
-### Step 2 — Fix Relatorios.tsx StatCard props
-Change all `title=` props to `label=` to match the `StatCardProps` interface. Also remove `trend` prop which doesn't exist on the component.
+### 2. Sidebar reorganization (`AppSidebar.tsx`)
+- **Lab**: Dashboard, Prospecção, Relatórios, Configurações.
+- **OCP**: Dashboard, Prospecção, Relatórios, Configurações + **Certificação**.
+Remove CRM/Endotoxina/Enriquecimento/Motor de Busca from both menus (keep route files for now, just hide from nav).
 
-### Step 3 — Fix CNAE search URL
-In `Prospeccao.tsx`, the CNAE query uses `/api/cnae/v2/{code}` — BrasilAPI's CNAE v2 endpoint requires clean numeric codes without dashes. Verify the codes being sent are clean 7-digit numbers.
+### 3. Rewrite `Certificacao.tsx` (OCP only)
+- Query `certificados` table.
+- 90-day alert: highlight row (red bg) + bell icon when `data_validade - today ≤ 90`.
+- Top counter: "X certificados próximos do vencimento" (≤90d, including expired).
+- Cadastro manual form + "Sincronizar INMETRO" button → calls new edge function.
+- Filter chips by portaria.
 
-### Technical Details
+### 4. Edge function `sync-inmetro`
+Fetches Scitec certificates from INMETRO Prodcert (best-effort scrape with fallback message if blocked). Upserts into `certificados`. Filtered by "SCITEC" name / acreditação number.
 
-**Certificacao.tsx changes:**
-- Remove `supabase.from("certificados_ocp")` calls (3 locations)
-- Replace with a simple UI showing OCP leads from the `leads` table filtered by `portaria_145_2022` and `portaria_384_2020` categories
-- Remove the `Certificado` interface and mutation logic
+### 5. Update `Prospeccao.tsx` (OCP cross-reference)
+- After CNPJ search results, check each CNPJ against `certificados.cnpj_empresa`.
+- Mark matched leads with badge "Cliente Ativo".
+- Toggle: "Ocultar leads já certificados pela Scitec".
+- Add filters: CNAE, UF, Data de Abertura (open-date range).
+- Result columns: Razão Social, Nome Fantasia, Telefone, Situação Cadastral.
+- Use BrasilAPI/CNPJ.ws via existing `search-cnpj` edge function (extend to accept UF + open-date filters).
 
-**Relatorios.tsx changes (line 66-69):**
-- `title=` → `label=`
-- Remove `trend="positive"` prop
+### 6. Update OCP Dashboard
+- Add alert card: "X certificados vencem em ≤90 dias" → clickable, navigates to `/certificacao?filter=criticos`.
+- Keep existing bento layout.
 
-**Prospeccao.tsx CNAE fix:**
-- Strip non-numeric chars from CNAE code before calling BrasilAPI
-- Use `/api/cnae/v2/{clean_code}` with just digits
+### 7. Files
+- New: `supabase/migrations/<ts>_certificados.sql`, `supabase/functions/sync-inmetro/index.ts`
+- Edit: `src/components/AppSidebar.tsx`, `src/pages/Certificacao.tsx`, `src/pages/Prospeccao.tsx`, `src/pages/Dashboard.tsx`, `supabase/functions/search-cnpj/index.ts`, `src/integrations/supabase/types.ts` (auto)
 
+### Notes / caveats
+- INMETRO Prodcert has no public API; the sync function will attempt scraping with proper UA — if blocked, returns a clear message and the user keeps the manual cadastro flow as fallback.
+- CNPJ.ws free tier is rate-limited (3 req/min); `search-cnpj` already uses BrasilAPI as primary — I'll keep BrasilAPI and add CNPJ.ws as enrichment fallback.

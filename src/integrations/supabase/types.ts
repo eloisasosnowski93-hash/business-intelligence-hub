@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      certificados: {
+        Row: {
+          cnpj_empresa: string | null
+          created_at: string
+          data_validade: string
+          id: string
+          numero_acreditacao: string | null
+          numero_certificado: string
+          portaria: string | null
+          razao_social: string | null
+          status_registro: string | null
+          titular: string | null
+          updated_at: string
+        }
+        Insert: {
+          cnpj_empresa?: string | null
+          created_at?: string
+          data_validade: string
+          id?: string
+          numero_acreditacao?: string | null
+          numero_certificado: string
+          portaria?: string | null
+          razao_social?: string | null
+          status_registro?: string | null
+          titular?: string | null
+          updated_at?: string
+        }
+        Update: {
+          cnpj_empresa?: string | null
+          created_at?: string
+          data_validade?: string
+          id?: string
+          numero_acreditacao?: string | null
+          numero_certificado?: string
+          portaria?: string | null
+          razao_social?: string | null
+          status_registro?: string | null
+          titular?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       leads: {
         Row: {
           categoria: string
