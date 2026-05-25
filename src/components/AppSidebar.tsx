@@ -1,8 +1,14 @@
+<<<<<<< HEAD
+=======
+import { useUnit } from "@/contexts/UnitContext";
+import { NavLink } from "@/components/NavLink";
+>>>>>>> 36bb10aa969731b9743f218595e129b278f9f98e
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
   SidebarFooter, useSidebar,
 } from "@/components/ui/sidebar";
+<<<<<<< HEAD
 import { NavLink } from "@/components/NavLink";
 import { LayoutDashboard, Search, ShieldCheck, FileBarChart, Settings } from "lucide-react";
 
@@ -12,6 +18,24 @@ const ocpItems = [
   { title: "Certificação OCP", url: "/certificacao",  icon: ShieldCheck },
   { title: "Relatórios",       url: "/relatorios",    icon: FileBarChart },
   { title: "Configurações",    url: "/configuracoes", icon: Settings },
+=======
+import { LayoutDashboard, Search, FileBarChart, FlaskConical, ShieldCheck, Beaker, Settings } from "lucide-react";
+
+const labItems = [
+  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Prospecção", url: "/prospeccao", icon: Search },
+  { title: "Endotoxina & Esterilidade", url: "/endotoxina", icon: FlaskConical },
+  { title: "Relatórios", url: "/relatorios", icon: FileBarChart },
+  { title: "Configurações", url: "/configuracoes", icon: Settings },
+];
+
+const ocpItems = [
+  { title: "Dashboard", url: "/", icon: LayoutDashboard },
+  { title: "Prospecção", url: "/prospeccao", icon: Search },
+  { title: "Certificação", url: "/certificacao", icon: ShieldCheck },
+  { title: "Relatórios", url: "/relatorios", icon: FileBarChart },
+  { title: "Configurações", url: "/configuracoes", icon: Settings },
+>>>>>>> 36bb10aa969731b9743f218595e129b278f9f98e
 ];
 
 export function AppSidebar() {
