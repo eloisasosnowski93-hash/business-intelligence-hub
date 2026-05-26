@@ -78,7 +78,7 @@ function criticidadeLabel(dias: number) {
   if (dias <= 30)  return { label: `${dias}d — URGENTE`, color: "bg-red-100 text-red-700",     dot: "bg-red-500" };
   if (dias <= 90)  return { label: `${dias}d restantes`, color: "bg-amber-100 text-amber-700",  dot: "bg-amber-500" };
   if (dias <= 180) return { label: `${dias}d restantes`, color: "bg-yellow-50 text-yellow-700", dot: "bg-yellow-400" };
-  return             { label: new Date(new Date(dateStr + "T00:00:00")).toLocaleDateString("pt-BR"), color: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-400" };
+  return             { label: `${dias}d restantes`, color: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-400" };
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
