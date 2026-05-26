@@ -215,22 +215,15 @@ REGRAS:
 RESPONDA APENAS JSON VÁLIDO, sem markdown:
 {"analise":"string","leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null"}]}`;
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          system: systemPrompt,
-          messages: [{ role: "user", content: comando }],
-        }),
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("hunt-leads-ocp", {
+        body: { systemPrompt, comando },
       });
 
-      if (!response.ok) throw new Error("Falha na comunicação com o motor");
+      if (fnError) throw new Error(fnError.message || "Falha na comunicação com o motor");
+      if (fnData?.error) throw new Error(fnData.error);
       addLog("📊 Processando alvos...");
 
-      const data = await response.json();
-      const rawText = data.content?.find((b: any) => b.type === "text")?.text || "{}";
+      const rawText = fnData?.text || "{}";
       let parsed: { analise?: string; leads?: AILead[] };
       try {
         parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
