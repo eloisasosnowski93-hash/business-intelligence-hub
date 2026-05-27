@@ -1,0 +1,11 @@
+{
+  "css.validate": false,
+  "scss.validate": false,
+  "less.validate": false,
+  "deno.enablePaths": [
+    "supabase/functions"
+  ],
+  "[typescript]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  }
+}
