@@ -811,13 +811,67 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-xs w-8">#</TableHead>
-                  <TableHead className="text-xs">Empresa + Deep Data</TableHead>
-                  <TableHead className="text-xs">Localização</TableHead>
-                  <TableHead className="text-xs">Motivo Estratégico</TableHead>
-                  <TableHead className="text-xs">Certificação</TableHead>
-                  <TableHead className="text-xs">OCP Atual</TableHead>
-                  <TableHead className="text-xs text-center">Score</TableHead>
-                  <TableHead className="text-xs text-center">Ações</TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      Empresa + Deep Data
+                      <HelpHint title="Empresa + Deep Data">
+                        Nome da empresa, CNPJ, CNAE e dados de inteligência: <b>decisores</b> (nome, cargo, e-mail e telefone), <b>OCP concorrente</b> e <b>nº estimado de certificados INMETRO</b>.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      Localização
+                      <HelpHint title="Localização">
+                        Cidade e UF (Unidade Federativa) onde a empresa está sediada. Usado para distribuir prospecção por região.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      Motivo Estratégico
+                      <HelpHint title="Motivo Estratégico">
+                        Por que esta empresa deve ser abordada AGORA: certificado vencendo, ausência de OCP, oportunidade de migração de concorrente, etc.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      Certificação
+                      <HelpHint title="Status de Certificação INMETRO">
+                        <b>Cliente Scitec</b>: já certificado por nós.<br />
+                        <b>Vence em Xd</b>: certificado próximo do vencimento.<br />
+                        <b>Sem certificação</b>: empresa-alvo sem certificação OCP ativa.<br />
+                        <b>A verificar</b>: status desconhecido — requer pesquisa.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      OCP Atual
+                      <HelpHint title="OCP Atual (concorrente)">
+                        Organismo de Certificação de Produto que atende a empresa hoje (Bureau Veritas, IMETRO, Inova, etc.). Útil para estratégia de migração.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    <span className="inline-flex items-center gap-1">
+                      Score
+                      <HelpHint title="Score de Prospecção (0–10)">
+                        Pontuação automática: CNAE correto +4 · empresa ativa +2 · contato disponível +2 · cert vencendo +2.<br />
+                        <b>🔥 7+</b> quente · <b>⏳ 4–6</b> morno · <b>➕ 0–3</b> frio.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    <span className="inline-flex items-center gap-1">
+                      Ações
+                      <HelpHint title="Ações">
+                        <b>CRM</b>: envia o lead direto para o pipeline OCP.<br />
+                        <b>Salvar</b>: adiciona à sua Lista de Contato (drawer) para exportar em CSV depois.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
