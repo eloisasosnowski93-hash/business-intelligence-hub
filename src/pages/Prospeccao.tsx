@@ -180,12 +180,15 @@ function ScoreDot({ score }: { score: number }) {
 
 function DeepPills({ deep }: { deep?: DeepHunterData }) {
   if (!deep) return null;
+  const firstDecisor = deep.decisores?.[0];
   return (
     <div className="flex flex-wrap gap-1 mt-1.5">
-      {deep.decisores && deep.decisores.length > 0 && (
+      {firstDecisor && (
         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
           <Users className="h-2.5 w-2.5" />
-          {deep.decisores[0]}{deep.decisores.length > 1 ? ` +${deep.decisores.length - 1}` : ""}
+          {firstDecisor.nome}
+          {firstDecisor.cargo ? ` (${firstDecisor.cargo})` : ""}
+          {deep.decisores!.length > 1 ? ` +${deep.decisores!.length - 1}` : ""}
         </span>
       )}
       {deep.ocp_concorrente && (
@@ -200,6 +203,44 @@ function DeepPills({ deep }: { deep?: DeepHunterData }) {
           ~{deep.certs_inmetro_estimado} certs INMETRO
         </span>
       )}
+    </div>
+  );
+}
+
+// Bloco detalhado de decisores (nome, cargo, e-mail, telefone)
+function DecisoresList({ decisores }: { decisores?: Decisor[] }) {
+  if (!decisores || decisores.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-1">
+      {decisores.slice(0, 3).map((d, i) => (
+        <div
+          key={i}
+          className="text-[10px] bg-purple-50/60 border border-purple-100 rounded px-2 py-1"
+        >
+          <div className="font-semibold text-purple-900 leading-tight">
+            {d.nome}
+            {d.cargo && <span className="font-normal text-purple-700"> — {d.cargo}</span>}
+          </div>
+          <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+            {d.email && (
+              <a
+                href={`mailto:${d.email}`}
+                className="inline-flex items-center gap-1 text-blue-700 hover:underline"
+              >
+                <Mail className="h-2.5 w-2.5" />{d.email}
+              </a>
+            )}
+            {d.telefone && (
+              <a
+                href={`tel:${d.telefone.replace(/\D/g, "")}`}
+                className="inline-flex items-center gap-1 text-emerald-700 hover:underline"
+              >
+                <Phone className="h-2.5 w-2.5" />{d.telefone}
+              </a>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
