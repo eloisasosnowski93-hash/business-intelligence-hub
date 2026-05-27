@@ -645,7 +645,7 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
 
         <div className="flex gap-2 items-start">
           <Textarea
-            placeholder={`Ex: "Fabricantes de ${portariaInfo.desc.toLowerCase()} no interior de SP" ou "Empresas com certificado vencendo que podem trocar de OCP" (Ctrl+Enter)`}
+            placeholder={`Ex: "Fabricantes de ${portariaInfo.desc.toLowerCase()} em todo o Brasil" ou "Empresas com certificado vencendo que podem trocar de OCP — cobertura nacional" (Ctrl+Enter)`}
             value={comando}
             onChange={(e) => setComando(e.target.value)}
             className="flex-1 min-h-[72px] resize-none bg-white text-sm"
