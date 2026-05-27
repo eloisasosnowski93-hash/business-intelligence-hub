@@ -896,6 +896,22 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
                             <Badge variant="outline" className="text-[10px] mt-0.5">{lead.cnae}</Badge>
                           )}
                           <DeepPills deep={lead.deep} />
+                          <DecisoresList decisores={lead.deep?.decisores} />
+                          {(lead.contato || lead.email || lead.telefone) && (
+                            <div className="mt-1.5 text-[10px] space-y-0.5">
+                              {lead.contato && <div className="text-muted-foreground">Contato: <span className="text-foreground">{lead.contato}</span></div>}
+                              {lead.email && (
+                                <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-1 text-blue-700 hover:underline mr-2">
+                                  <Mail className="h-2.5 w-2.5" />{lead.email}
+                                </a>
+                              )}
+                              {lead.telefone && (
+                                <a href={`tel:${lead.telefone.replace(/\D/g,"")}`} className="inline-flex items-center gap-1 text-emerald-700 hover:underline">
+                                  <Phone className="h-2.5 w-2.5" />{lead.telefone}
+                                </a>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </TableCell>
