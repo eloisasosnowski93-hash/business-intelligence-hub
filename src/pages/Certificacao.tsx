@@ -116,10 +116,15 @@ export default function Certificacao() {
     try {
       const { data, error } = await supabase.functions.invoke("sync-inmetro", { body: {} });
       if (error) throw error;
-      toast.success(data?.message || "Sincronização concluída");
+      if (data?.fallback) {
+        toast.warning(data.message || "Varredura indisponível — mantendo dados atuais");
+      } else {
+        toast.success(data?.message || "Sincronização concluída");
+      }
       qc.invalidateQueries({ queryKey: ["certificados"] });
+      qc.invalidateQueries({ queryKey: ["cert-alerts-90d"] });
     } catch (e: any) {
-      toast.error(e.message || "Erro ao sincronizar com INMETRO");
+      toast.error(e.message || "Erro ao sincronizar — dados atuais preservados");
     } finally { setSyncing(false); }
   };
 
