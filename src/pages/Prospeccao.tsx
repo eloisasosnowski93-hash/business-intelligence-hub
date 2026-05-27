@@ -87,8 +87,16 @@ function criticidadeLabel(dias: number) {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface Decisor {
+  nome: string;
+  cargo?: string;
+  email?: string;
+  telefone?: string;
+  linkedin?: string;
+}
+
 interface DeepHunterData {
-  decisores?: string[];
+  decisores?: Decisor[];
   ocp_concorrente?: string;
   certs_inmetro_estimado?: number;
 }
@@ -110,6 +118,28 @@ interface AILead {
   diasVencimento?: number;
   ocp_atual?: string;
   deep?: DeepHunterData;
+}
+
+// Tooltip clicável com "?" — explica o significado de cada campo/coluna
+function HelpHint({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full text-muted-foreground hover:text-blue-700 transition-colors align-middle"
+          aria-label={`Ajuda: ${title}`}
+        >
+          <HelpCircle className="h-3 w-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-64 text-xs leading-relaxed">
+        <p className="font-semibold text-sm mb-1 text-foreground">{title}</p>
+        <div className="text-muted-foreground">{children}</div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
