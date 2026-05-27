@@ -265,17 +265,24 @@ function ListaContatoDrawer({
     const headers = [
       "empresa","cnpj","cidade","uf","cnae","contato",
       "email","telefone","motivo","score","portaria",
-      "certStatus","ocp_atual","decisores","ocp_concorrente","certs_inmetro_estimado",
+      "certStatus","ocp_atual","decisores","decisores_emails","decisores_telefones",
+      "ocp_concorrente","certs_inmetro_estimado",
     ];
-    const rows = lista.map((l) => [
-      l.empresa, l.cnpj || "", l.cidade || "", l.uf || "", l.cnae || "",
-      l.contato || "", l.email || "", l.telefone || "",
-      `"${(l.motivo || "").replace(/"/g, '""')}"`,
-      l.score, l.portaria, l.certStatus, l.ocp_atual || "",
-      (l.deep?.decisores || []).join("; "),
-      l.deep?.ocp_concorrente || "",
-      l.deep?.certs_inmetro_estimado ?? "",
-    ].join(","));
+    const rows = lista.map((l) => {
+      const decisores = l.deep?.decisores || [];
+      const decisoresStr = decisores.map(d => `${d.nome}${d.cargo ? ` (${d.cargo})` : ""}`).join("; ");
+      const emailsStr = decisores.map(d => d.email).filter(Boolean).join("; ");
+      const telsStr = decisores.map(d => d.telefone).filter(Boolean).join("; ");
+      return [
+        l.empresa, l.cnpj || "", l.cidade || "", l.uf || "", l.cnae || "",
+        l.contato || "", l.email || "", l.telefone || "",
+        `"${(l.motivo || "").replace(/"/g, '""')}"`,
+        l.score, l.portaria, l.certStatus, l.ocp_atual || "",
+        `"${decisoresStr}"`, `"${emailsStr}"`, `"${telsStr}"`,
+        l.deep?.ocp_concorrente || "",
+        l.deep?.certs_inmetro_estimado ?? "",
+      ].join(",");
+    });
     const blob = new Blob(
       [headers.join(",") + "\n" + rows.join("\n")],
       { type: "text/csv;charset=utf-8;" }
