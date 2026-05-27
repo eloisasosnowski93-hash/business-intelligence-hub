@@ -506,6 +506,11 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
       });
 
       if (fnError) throw new Error(fnError.message || "Falha na comunicação com o motor");
+      if (data?.fallback) {
+        toast.warning(data?.error || "Motor temporariamente indisponível — tente novamente em instantes");
+        addLog("⚠️ " + (data?.error || "Motor indisponível"));
+        return;
+      }
       if (data?.error) throw new Error(data.error);
       addLog("📊 Processando e enriquecendo alvos...");
 

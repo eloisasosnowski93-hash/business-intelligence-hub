@@ -22,6 +22,7 @@ export type Database = {
           id: string
           numero_acreditacao: string | null
           numero_certificado: string
+          organismo_certificador: string
           portaria: string | null
           razao_social: string | null
           status_registro: string | null
@@ -35,6 +36,7 @@ export type Database = {
           id?: string
           numero_acreditacao?: string | null
           numero_certificado: string
+          organismo_certificador?: string
           portaria?: string | null
           razao_social?: string | null
           status_registro?: string | null
@@ -48,6 +50,7 @@ export type Database = {
           id?: string
           numero_acreditacao?: string | null
           numero_certificado?: string
+          organismo_certificador?: string
           portaria?: string | null
           razao_social?: string | null
           status_registro?: string | null

@@ -29,31 +29,28 @@ Deno.serve(async (req) => {
     });
 
     if (!res.ok) {
-      const errText = await res.text();
+      const errText = await res.text().catch(() => "");
       console.error("AI Gateway error:", res.status, errText);
-      if (res.status === 429) {
-        return new Response(JSON.stringify({ error: "Limite de requisições atingido. Tente novamente em instantes." }), {
-          status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (res.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos de IA esgotados. Adicione créditos no workspace." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI Gateway: ${res.status}`);
+      const msg =
+        res.status === 429 ? "Limite de requisições atingido. Tente novamente em instantes."
+        : res.status === 402 ? "Créditos de IA esgotados. Adicione créditos no workspace."
+        : `Motor de IA indisponível (status ${res.status}). Tente novamente.`;
+      // Sempre 200 para o front não quebrar com "non-2xx"
+      return new Response(JSON.stringify({ text: "{}", error: msg, fallback: true, upstream_status: res.status }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content || "{}";
 
     return new Response(JSON.stringify({ text }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
     console.error("hunt-leads-ocp error:", e);
-    return new Response(JSON.stringify({ error: (e as Error).message }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ text: "{}", error: (e as Error).message || "Erro inesperado", fallback: true }), {
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
