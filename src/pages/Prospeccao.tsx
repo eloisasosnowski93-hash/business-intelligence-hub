@@ -484,10 +484,10 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
   }, [aiLeads, filterStatus]);
 
   const quickCommands = [
-    `Empresas de ${portariaInfo.desc.toLowerCase()} em SP com cert. vencendo`,
-    `Fabricantes sem certificação OCP na região Sul`,
-    `Empresas com OCP concorrente que posso abordar`,
-    `Maiores fabricantes do setor para ${portariaInfo.label}`,
+    `Empresas de ${portariaInfo.desc.toLowerCase()} em todo o Brasil com cert. vencendo`,
+    `Fabricantes sem certificação OCP — cobertura nacional (todas as regiões)`,
+    `Empresas com OCP concorrente que posso abordar no Brasil inteiro`,
+    `Maiores fabricantes do setor (BR) para ${portariaInfo.label}`,
   ];
 
   return (
