@@ -1,12 +1,7 @@
 /**
- * Prospecção OCP — Motor de Inteligência de Mercado
- * ─────────────────────────────────────────────────
- * Arquitetura:
- *  - Sem abas "Base Interna / Receita Federal" — método novo unificado
- *  - Claude API como cérebro de análise e enriquecimento de leads
- *  - Portarias OCP: 145/2022, 384/2020, 501/2021, 071/2022
- *  - Cross-reference automático com tabela `certificados` (Supabase)
- *  - Score de criticidade por proximidade de vencimento
+ * Prospecção OCP — Motor de Inteligência de Mercado v2
+ * ─────────────────────────────────────────────────────
+ * v2: sem limite de leads · Deep Hunter · Save to List · Drawer · Log 5 etapas
  */
 
 import { useState, useMemo } from "react";
@@ -20,15 +15,20 @@ import {
   TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
+} from "@/components/ui/sheet";
+import {
   ShieldCheck, ShieldAlert, ShieldX,
-  Target, Loader2, Sparkles, CalendarClock,
+  Target, Loader2, Sparkles,
   Building2, MapPin, AlertTriangle, CheckCircle2,
   ArrowRight, FileSearch, BrainCircuit, Zap,
+  Bookmark, BookmarkCheck, Download, Trash2,
+  Users, Award, ListChecks, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMonitoredPortarias } from "@/hooks/useMonitoredPortarias";
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PORTARIAS_OCP = [
   {
@@ -74,14 +74,20 @@ function diasParaVencer(dateStr: string): number {
 }
 
 function criticidadeLabel(dias: number) {
-  if (dias < 0)    return { label: "Vencido",          color: "bg-red-200 text-red-900",       dot: "bg-red-600" };
-  if (dias <= 30)  return { label: `${dias}d — URGENTE`, color: "bg-red-100 text-red-700",     dot: "bg-red-500" };
+  if (dias < 0)    return { label: "Vencido",            color: "bg-red-200 text-red-900",      dot: "bg-red-600" };
+  if (dias <= 30)  return { label: `${dias}d — URGENTE`, color: "bg-red-100 text-red-700",      dot: "bg-red-500" };
   if (dias <= 90)  return { label: `${dias}d restantes`, color: "bg-amber-100 text-amber-700",  dot: "bg-amber-500" };
   if (dias <= 180) return { label: `${dias}d restantes`, color: "bg-yellow-50 text-yellow-700", dot: "bg-yellow-400" };
-  return             { label: `${dias}d restantes`, color: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-400" };
+  return             { label: new Date(dateStr + "T00:00:00").toLocaleDateString("pt-BR"), color: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-400" };
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface DeepHunterData {
+  decisores?: string[];
+  ocp_concorrente?: string;
+  certs_inmetro_estimado?: number;
+}
 
 interface AILead {
   id: string;
@@ -99,28 +105,29 @@ interface AILead {
   certStatus: "sem_cert" | "vencendo" | "ativo" | "desconhecido";
   diasVencimento?: number;
   ocp_atual?: string;
+  deep?: DeepHunterData;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function CertBadge({ status, dias }: { status: AILead["certStatus"]; dias?: number }) {
   if (status === "ativo") return (
-    <Badge className="gap-1 text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200">
+    <Badge className="gap-1 text-[10px] bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
       <ShieldCheck className="h-3 w-3" /> Cliente Scitec
     </Badge>
   );
   if (status === "vencendo") return (
-    <Badge className="gap-1 text-[10px] bg-orange-100 text-orange-700 border-orange-200">
+    <Badge className="gap-1 text-[10px] bg-orange-100 text-orange-700 border-orange-200 hover:bg-orange-100">
       <ShieldAlert className="h-3 w-3" /> Vence em {dias}d
     </Badge>
   );
   if (status === "sem_cert") return (
-    <Badge className="gap-1 text-[10px] bg-slate-100 text-slate-600 border-slate-200">
+    <Badge className="gap-1 text-[10px] bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-100">
       <ShieldX className="h-3 w-3" /> Sem certificação
     </Badge>
   );
   return (
-    <Badge className="gap-1 text-[10px] bg-blue-50 text-blue-600 border-blue-200">
+    <Badge className="gap-1 text-[10px] bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-50">
       <FileSearch className="h-3 w-3" /> A verificar
     </Badge>
   );
@@ -137,6 +144,177 @@ function ScoreDot({ score }: { score: number }) {
   );
 }
 
+function DeepPills({ deep }: { deep?: DeepHunterData }) {
+  if (!deep) return null;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5">
+      {deep.decisores && deep.decisores.length > 0 && (
+        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
+          <Users className="h-2.5 w-2.5" />
+          {deep.decisores[0]}{deep.decisores.length > 1 ? ` +${deep.decisores.length - 1}` : ""}
+        </span>
+      )}
+      {deep.ocp_concorrente && (
+        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-100">
+          <Award className="h-2.5 w-2.5" />
+          {deep.ocp_concorrente}
+        </span>
+      )}
+      {deep.certs_inmetro_estimado !== undefined && (
+        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+          <ListChecks className="h-2.5 w-2.5" />
+          ~{deep.certs_inmetro_estimado} certs INMETRO
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Drawer Minha Lista ───────────────────────────────────────────────────────
+
+function ListaContatoDrawer({
+  open,
+  onClose,
+  lista,
+  onRemove,
+  onClear,
+}: {
+  open: boolean;
+  onClose: () => void;
+  lista: AILead[];
+  onRemove: (id: string) => void;
+  onClear: () => void;
+}) {
+  const exportCsv = () => {
+    if (!lista.length) return;
+    const headers = [
+      "empresa","cnpj","cidade","uf","cnae","contato",
+      "email","telefone","motivo","score","portaria",
+      "certStatus","ocp_atual","decisores","ocp_concorrente","certs_inmetro_estimado",
+    ];
+    const rows = lista.map((l) => [
+      l.empresa, l.cnpj || "", l.cidade || "", l.uf || "", l.cnae || "",
+      l.contato || "", l.email || "", l.telefone || "",
+      `"${(l.motivo || "").replace(/"/g, '""')}"`,
+      l.score, l.portaria, l.certStatus, l.ocp_atual || "",
+      (l.deep?.decisores || []).join("; "),
+      l.deep?.ocp_concorrente || "",
+      l.deep?.certs_inmetro_estimado ?? "",
+    ].join(","));
+    const blob = new Blob(
+      [headers.join(",") + "\n" + rows.join("\n")],
+      { type: "text/csv;charset=utf-8;" }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `lista_contato_ocp_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exportado!");
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onClose}>
+      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col p-0">
+        <SheetHeader className="px-5 pt-5 pb-3 border-b border-border">
+          <div className="flex items-center justify-between">
+            <div>
+              <SheetTitle className="text-base font-heading flex items-center gap-2">
+                <BookmarkCheck className="h-4 w-4 text-blue-700" />
+                Minha Lista de Contato
+              </SheetTitle>
+              <SheetDescription className="text-xs mt-0.5">
+                {lista.length} empresa{lista.length !== 1 ? "s" : ""} salva{lista.length !== 1 ? "s" : ""}
+              </SheetDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs h-8"
+                onClick={exportCsv}
+                disabled={!lista.length}
+              >
+                <Download className="h-3.5 w-3.5" /> Exportar CSV
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1.5 text-xs h-8 text-destructive hover:text-destructive"
+                onClick={onClear}
+                disabled={!lista.length}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Limpar
+              </Button>
+            </div>
+          </div>
+        </SheetHeader>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+          {lista.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-center">
+              <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3">
+                <Bookmark className="h-6 w-6 text-blue-300" />
+              </div>
+              <p className="text-sm font-medium text-foreground">Lista vazia</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Clique no ícone de bookmark em qualquer lead para salvá-lo aqui.
+              </p>
+            </div>
+          ) : (
+            lista.map((lead) => (
+              <div
+                key={lead.id}
+                className="relative p-3.5 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors group"
+              >
+                <button
+                  onClick={() => onRemove(lead.id)}
+                  className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+                <div className="flex items-start gap-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-blue-100 flex items-center justify-center shrink-0">
+                    <Building2 className="h-4 w-4 text-blue-700" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm leading-tight truncate">{lead.empresa}</p>
+                    {lead.cnpj && (
+                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{lead.cnpj}</p>
+                    )}
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      <CertBadge status={lead.certStatus} dias={lead.diasVencimento} />
+                      {lead.ocp_atual && (
+                        <Badge variant="outline" className="text-[10px]">{lead.ocp_atual}</Badge>
+                      )}
+                      <Badge className="text-[10px] bg-blue-50 text-blue-700 border-blue-100">
+                        Score {lead.score}/10
+                      </Badge>
+                    </div>
+                    {lead.deep && <DeepPills deep={lead.deep} />}
+                    <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug line-clamp-2">
+                      {lead.motivo}
+                    </p>
+                    {lead.email && (
+                      <a
+                        href={`mailto:${lead.email}`}
+                        className="text-[10px] text-primary hover:underline mt-1 block"
+                      >
+                        ✉ {lead.email}
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Prospeccao() {
@@ -147,12 +325,14 @@ export default function Prospeccao() {
   const [huntLog, setHuntLog] = useState<string[]>([]);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<"todos" | "sem_cert" | "vencendo" | "ativo">("todos");
+  const [listaContato, setListaContato] = useState<AILead[]>([]);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const { portarias: monitored } = useMonitoredPortarias();
   const queryClient = useQueryClient();
   const portariaInfo = PORTARIAS_OCP.find((p) => p.value === selectedPortaria)!;
 
-  // ── Alvos de renovação da base ────────────────────────────────────────────
+  // ── Alvos de renovação ────────────────────────────────────────────────────
   const { data: certAlvos = [], isLoading: certLoading } = useQuery({
     queryKey: ["cert-alvos", selectedPortaria],
     queryFn: async () => {
@@ -179,14 +359,28 @@ export default function Prospeccao() {
 
   const critCount = certAlvos.filter((c) => c.dias <= 90).length;
 
+  // ── Lista helpers ─────────────────────────────────────────────────────────
+  const isInLista = (id: string) => listaContato.some((l) => l.id === id);
+
+  const toggleLista = (lead: AILead) => {
+    if (isInLista(lead.id)) {
+      setListaContato((prev) => prev.filter((l) => l.id !== lead.id));
+      toast.info(`${lead.empresa} removido da lista`);
+    } else {
+      setListaContato((prev) => [...prev, lead]);
+      toast.success(`${lead.empresa} adicionado à lista!`);
+    }
+  };
+
   // ── Motor IA ──────────────────────────────────────────────────────────────
-  const addLog = (msg: string) => setHuntLog((prev) => [...prev.slice(-4), msg]);
+  const addLog = (msg: string) => setHuntLog((prev) => [...prev.slice(-5), msg]);
 
   const handleHunt = async () => {
     if (!comando.trim()) { toast.error("Descreva o que você quer prospectar"); return; }
     setIsHunting(true);
     setAiLeads([]);
     setHuntLog([]);
+
     try {
       addLog("🔍 Analisando contexto OCP...");
       const critAlvos = certAlvos.filter((c) => c.dias <= 90);
@@ -196,7 +390,7 @@ export default function Prospeccao() {
 
       addLog("🧠 Motor de inteligência processando...");
 
-      const systemPrompt = `Você é o Hunter OCP da Scitec Certificações — especialista em prospecção de empresas para certificação OCP junto ao INMETRO.
+      const systemPrompt = `Você é o Hunter OCP da Scitec Certificações — especialista em prospecção estratégica de empresas para certificação de produto OCP junto ao INMETRO.
 
 PORTARIA ATIVA: ${portariaInfo.label} — ${portariaInfo.desc}
 CNAEs principais: ${portariaInfo.cnaes.join(", ") || "variados"}
@@ -206,25 +400,39 @@ CERTIFICADOS CRÍTICOS NA BASE (≤ 90 dias):
 ${certContext || "Nenhum certificado crítico na base."}
 
 REGRAS:
-1. Gere 5-8 leads estratégicos e plausíveis para o setor
-2. Priorize empresas com certificado vencendo ou sem certificação
-3. Identifique se empresa pode estar com OUTRA OCP concorrente
-4. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2
-5. motivo: UMA frase estratégica sobre por que abordar agora
+1. Retorne a lista COMPLETA de empresas encontradas que atendam rigorosamente aos critérios. NÃO há limite artificial de quantidade — inclua todas as empresas relevantes.
+2. Priorize empresas com certificado vencendo ou sem certificação OCP ativa.
+3. Identifique se a empresa pode estar com OUTRA OCP concorrente (Bureau Veritas, IMETRO, Inova, etc.).
+4. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2.
+5. motivo: UMA frase estratégica sobre por que abordar AGORA.
+6. Para cada lead, preencher o campo "deep":
+   - decisores: array de até 3 nomes com cargo (ex: "João Silva (Dir. Compras)")
+   - ocp_concorrente: nome da OCP atual se houver (ou null)
+   - certs_inmetro_estimado: número estimado de certificados ativos no INMETRO
 
-RESPONDA APENAS JSON VÁLIDO, sem markdown:
-{"analise":"string","leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null"}]}`;
+RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
+{"analise":"string","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":["string"],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
 
-      const { data: fnData, error: fnError } = await supabase.functions.invoke("hunt-leads-ocp", {
-        body: { systemPrompt, comando },
+      addLog("[Hunter] Mapeando decisores e certificados...");
+
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages: [{ role: "user", content: comando }],
+        }),
       });
 
-      if (fnError) throw new Error(fnError.message || "Falha na comunicação com o motor");
-      if (fnData?.error) throw new Error(fnData.error);
-      addLog("📊 Processando alvos...");
+      if (!response.ok) throw new Error("Falha na comunicação com o motor");
+      addLog("📊 Processando e enriquecendo alvos...");
 
-      const rawText = fnData?.text || "{}";
-      let parsed: { analise?: string; leads?: AILead[] };
+      const data = await response.json();
+      const rawText = data.content?.find((b: any) => b.type === "text")?.text || "{}";
+
+      let parsed: { analise?: string; total_encontrado?: number; leads?: AILead[] };
       try {
         parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
       } catch {
@@ -238,8 +446,8 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
         return { ...l, certStatus } as AILead;
       });
 
-      addLog(`✅ ${leads.length} alvos mapeados`);
-      if (parsed.analise) toast.success(parsed.analise, { duration: 7000 });
+      addLog(`✅ ${leads.length} alvos mapeados com enriquecimento Deep Hunter`);
+      if (parsed.analise) toast.success(parsed.analise, { duration: 8000 });
       setAiLeads(leads.sort((a, b) => b.score - a.score));
     } catch (err: any) {
       toast.error(err.message || "Erro no motor");
@@ -280,8 +488,6 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
     return aiLeads.filter((l) => l.certStatus === filterStatus);
   }, [aiLeads, filterStatus]);
 
-  const monInfo = monitored.find((m) => m.numero === portariaInfo.numero);
-
   const quickCommands = [
     `Empresas de ${portariaInfo.desc.toLowerCase()} em SP com cert. vencendo`,
     `Fabricantes sem certificação OCP na região Sul`,
@@ -300,7 +506,7 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
             Motor de Inteligência de Mercado · Scitec Certificações
           </p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           <Badge className="text-xs px-3 py-1 bg-blue-900 text-white border-0">
             <ShieldCheck className="h-3 w-3 mr-1" /> SCITEC OCP
           </Badge>
@@ -309,6 +515,19 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
               <AlertTriangle className="h-3 w-3 mr-1" /> {critCount} críticos
             </Badge>
           )}
+          {/* Botão Minha Lista */}
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-semibold transition-all"
+          >
+            <BookmarkCheck className="h-3.5 w-3.5" />
+            Minha Lista
+            {listaContato.length > 0 && (
+              <span className="absolute -top-2 -right-2 h-5 w-5 rounded-full bg-blue-900 text-white text-[10px] flex items-center justify-center font-bold">
+                {listaContato.length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -372,12 +591,12 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
                 <div
                   key={c.id}
                   className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                    c.dias < 0 ? "bg-red-100 border border-red-200" :
+                    c.dias < 0   ? "bg-red-100 border border-red-200" :
                     c.dias <= 90 ? "bg-amber-50 border border-amber-100" :
-                    "bg-muted/40 border border-transparent"
+                                   "bg-muted/40 border border-transparent"
                   }`}
                 >
-                  <span className="text-[10px] text-muted-foreground w-4 shrink-0 font-mono">#{i+1}</span>
+                  <span className="text-[10px] text-muted-foreground w-4 shrink-0 font-mono">#{i + 1}</span>
                   <span className={`h-2 w-2 rounded-full shrink-0 ${crit.dot}`} />
                   <div className="flex-1 min-w-0">
                     <span className="font-medium text-foreground truncate block text-xs">
@@ -409,15 +628,14 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
           </div>
           <div className="flex-1">
             <h3 className="text-sm font-heading font-semibold text-foreground">
-              Motor de Inteligência OCP
+              Motor de Inteligência OCP + Deep Hunter
             </h3>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Descreva o perfil de empresa, setor ou estratégia. O motor mapeia os melhores alvos para a {portariaInfo.label}.
+              Descreva o perfil de empresa, setor ou estratégia. O motor mapeia alvos, decisores, OCP concorrente e certificados INMETRO.
             </p>
           </div>
         </div>
 
-        {/* Quick commands */}
         <div className="flex flex-wrap gap-1.5 mb-3">
           {quickCommands.map((q, i) => (
             <button
@@ -432,7 +650,7 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
 
         <div className="flex gap-2 items-start">
           <Textarea
-            placeholder={`Ex: "Fabricantes de ${portariaInfo.desc.toLowerCase()} no interior de SP" ou "Empresas com certificado vencendo que podem trocar de OCP"  (Ctrl+Enter para enviar)`}
+            placeholder={`Ex: "Fabricantes de ${portariaInfo.desc.toLowerCase()} no interior de SP" ou "Empresas com certificado vencendo que podem trocar de OCP" (Ctrl+Enter)`}
             value={comando}
             onChange={(e) => setComando(e.target.value)}
             className="flex-1 min-h-[72px] resize-none bg-white text-sm"
@@ -451,10 +669,14 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
           </Button>
         </div>
 
+        {/* Log animado 5 etapas */}
         {(isHunting || huntLog.length > 0) && (
           <div className="mt-3 space-y-1 border-t border-blue-100 pt-3">
             {huntLog.map((log, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div
+                key={i}
+                className="flex items-center gap-2 text-xs text-muted-foreground"
+              >
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
                 {log}
               </div>
@@ -477,6 +699,9 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
                 <Target className="h-4 w-4 text-primary" />
                 Alvos Mapeados
                 <Badge className="text-xs bg-blue-100 text-blue-700 border-blue-200">{filteredLeads.length}</Badge>
+                <Badge className="text-xs bg-purple-100 text-purple-700 border-purple-200">
+                  <Users className="h-2.5 w-2.5 mr-1" /> Deep Hunter
+                </Badge>
               </h3>
               <p className="text-xs text-muted-foreground">Ordenados por score · {portariaInfo.label}</p>
             </div>
@@ -494,7 +719,10 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
                   </button>
                 ))}
               </div>
-              <button onClick={() => setAiLeads([])} className="text-[11px] text-muted-foreground hover:text-destructive">
+              <button
+                onClick={() => setAiLeads([])}
+                className="text-[11px] text-muted-foreground hover:text-destructive"
+              >
                 limpar
               </button>
             </div>
@@ -505,13 +733,13 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-xs w-8">#</TableHead>
-                  <TableHead className="text-xs">Empresa</TableHead>
+                  <TableHead className="text-xs">Empresa + Deep Data</TableHead>
                   <TableHead className="text-xs">Localização</TableHead>
                   <TableHead className="text-xs">Motivo Estratégico</TableHead>
                   <TableHead className="text-xs">Certificação</TableHead>
                   <TableHead className="text-xs">OCP Atual</TableHead>
                   <TableHead className="text-xs text-center">Score</TableHead>
-                  <TableHead className="text-xs">Ação</TableHead>
+                  <TableHead className="text-xs text-center">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -529,8 +757,13 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
                         <Building2 className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                         <div>
                           <p className="font-medium text-sm">{lead.empresa}</p>
-                          {lead.cnpj && <p className="text-[10px] text-muted-foreground font-mono">{lead.cnpj}</p>}
-                          {lead.cnae && <Badge variant="outline" className="text-[10px] mt-0.5">{lead.cnae}</Badge>}
+                          {lead.cnpj && (
+                            <p className="text-[10px] text-muted-foreground font-mono">{lead.cnpj}</p>
+                          )}
+                          {lead.cnae && (
+                            <Badge variant="outline" className="text-[10px] mt-0.5">{lead.cnae}</Badge>
+                          )}
+                          <DeepPills deep={lead.deep} />
                         </div>
                       </div>
                     </TableCell>
@@ -557,7 +790,7 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
                       <ScoreDot score={lead.score} />
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col gap-1">
+                      <div className="flex flex-col gap-1 items-stretch min-w-[80px]">
                         <Button
                           size="sm"
                           className="text-xs h-7 gap-1 bg-blue-900 hover:bg-blue-800 text-white"
@@ -568,8 +801,27 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
                             ? <Loader2 className="h-3 w-3 animate-spin" />
                             : <><CheckCircle2 className="h-3 w-3" /> CRM</>}
                         </Button>
+                        {/* Save to List */}
+                        <button
+                          onClick={() => toggleLista(lead)}
+                          title={isInLista(lead.id) ? "Remover da lista" : "Salvar na lista"}
+                          className={`flex items-center justify-center gap-1 text-[10px] py-1 rounded border transition-all ${
+                            isInLista(lead.id)
+                              ? "bg-blue-900 text-white border-blue-900"
+                              : "bg-card text-blue-700 border-blue-200 hover:bg-blue-50"
+                          }`}
+                        >
+                          {isInLista(lead.id)
+                            ? <><BookmarkCheck className="h-3 w-3" /> Salvo</>
+                            : <><Bookmark className="h-3 w-3" /> Salvar</>}
+                        </button>
                         {lead.email && (
-                          <a href={`mailto:${lead.email}`} className="text-[10px] text-primary hover:underline text-center">e-mail</a>
+                          <a
+                            href={`mailto:${lead.email}`}
+                            className="text-[10px] text-primary hover:underline text-center"
+                          >
+                            e-mail
+                          </a>
                         )}
                       </div>
                     </TableCell>
@@ -595,14 +847,37 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown:
           </div>
           <h3 className="text-base font-heading font-semibold mb-1">Motor aguardando seu comando</h3>
           <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            Descreva o perfil de empresas para a <strong>{portariaInfo.label}</strong> e o motor mapeará os melhores alvos estratégicos.
+            Descreva o perfil de empresas para a <strong>{portariaInfo.label}</strong> e o motor mapeará todos os alvos com Deep Hunter ativo.
           </p>
           <div className="flex items-center justify-center gap-2 mt-4">
             <ArrowRight className="h-4 w-4 text-blue-400" />
             <span className="text-xs text-blue-600 font-medium">Use os atalhos acima ou escreva um comando personalizado</span>
           </div>
+          <div className="flex items-center justify-center gap-4 mt-3">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Users className="h-3 w-3 text-purple-500" /> Decisores mapeados
+            </span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <Award className="h-3 w-3 text-red-500" /> OCP concorrente
+            </span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <ListChecks className="h-3 w-3 text-blue-500" /> Certs. INMETRO
+            </span>
+          </div>
         </div>
       )}
+
+      {/* Drawer Minha Lista de Contato */}
+      <ListaContatoDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        lista={listaContato}
+        onRemove={(id) => setListaContato((prev) => prev.filter((l) => l.id !== id))}
+        onClear={() => {
+          setListaContato([]);
+          toast.info("Lista limpa.");
+        }}
+      />
     </div>
   );
 }
