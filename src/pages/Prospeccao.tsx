@@ -415,22 +415,15 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
 
       addLog("[Hunter] Mapeando decisores e certificados...");
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 4000,
-          system: systemPrompt,
-          messages: [{ role: "user", content: comando }],
-        }),
+      const { data, error: fnError } = await supabase.functions.invoke("hunt-leads-ocp", {
+        body: { systemPrompt, comando },
       });
 
-      if (!response.ok) throw new Error("Falha na comunicação com o motor");
+      if (fnError) throw new Error(fnError.message || "Falha na comunicação com o motor");
+      if (data?.error) throw new Error(data.error);
       addLog("📊 Processando e enriquecendo alvos...");
 
-      const data = await response.json();
-      const rawText = data.content?.find((b: any) => b.type === "text")?.text || "{}";
+      const rawText = data?.text || "{}";
 
       let parsed: { analise?: string; total_encontrado?: number; leads?: AILead[] };
       try {
