@@ -375,6 +375,7 @@ function ListaContatoDrawer({
                       </Badge>
                     </div>
                     {lead.deep && <DeepPills deep={lead.deep} />}
+                    {lead.deep?.decisores && <DecisoresList decisores={lead.deep.decisores} />}
                     <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug line-clamp-2">
                       {lead.motivo}
                     </p>
