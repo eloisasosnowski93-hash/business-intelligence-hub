@@ -70,7 +70,7 @@ export default function Certificacao() {
   });
 
   // Auto-sync na primeira carga: dispara varredura SCITEC se a tabela estiver vazia
-  useState(() => {
+  useEffect(() => {
     (async () => {
       try {
         const { count } = await supabase.from("certificados").select("*", { count: "exact", head: true });
@@ -84,8 +84,8 @@ export default function Certificacao() {
         }
       } catch (e) { console.warn("auto-sync skipped", e); }
     })();
-    return 0;
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleAdd = async () => {
     if (!form.numero_certificado || !form.data_validade) {
