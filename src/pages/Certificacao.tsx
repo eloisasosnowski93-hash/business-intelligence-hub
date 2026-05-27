@@ -59,9 +59,32 @@ export default function Certificacao() {
     queryKey: ["certificados"],
     queryFn: async () => {
       const { data, error } = await supabase.from("certificados").select("*").order("data_validade");
-      if (error) throw error;
+      if (error) {
+        console.error("[certificados] fetch error", error);
+        toast.error("Falha ao carregar certificados — exibindo lista vazia");
+        return [];
+      }
       return (data || []) as Certificado[];
     },
+    retry: 1,
+  });
+
+  // Auto-sync na primeira carga: dispara varredura SCITEC se a tabela estiver vazia
+  useState(() => {
+    (async () => {
+      try {
+        const { count } = await supabase.from("certificados").select("*", { count: "exact", head: true });
+        if ((count ?? 0) === 0) {
+          const { data } = await supabase.functions.invoke("sync-inmetro", { body: {} });
+          if (data?.success) {
+            toast.success(data.message);
+            qc.invalidateQueries({ queryKey: ["certificados"] });
+            qc.invalidateQueries({ queryKey: ["cert-alerts-90d"] });
+          }
+        }
+      } catch (e) { console.warn("auto-sync skipped", e); }
+    })();
+    return 0;
   });
 
   const handleAdd = async () => {
