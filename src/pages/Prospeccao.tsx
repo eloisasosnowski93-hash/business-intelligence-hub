@@ -489,13 +489,14 @@ REGRAS:
 5. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2.
 6. motivo: UMA frase estratégica sobre por que abordar AGORA.
 7. Para cada lead, preencher o campo "deep":
-   - decisores: array de até 3 nomes com cargo (ex: "João Silva (Dir. Compras)")
+   - decisores: array de até 3 OBJETOS de decisores reais (Diretor Compras, Gerente Qualidade, CEO, Diretor Industrial). Cada objeto DEVE conter: { "nome": "Nome Completo", "cargo": "Cargo", "email": "email corporativo (ex: nome@empresa.com.br) ou null se não souber", "telefone": "telefone com DDD ou null" }. SEMPRE busque inferir e-mails corporativos plausíveis no domínio da empresa quando não tiver fonte direta; marque telefone como null se não houver dado público.
    - ocp_concorrente: nome da OCP atual se houver (ou null)
    - certs_inmetro_estimado: número estimado de certificados ativos no INMETRO
 8. Distribua geograficamente: tente incluir empresas de múltiplos estados (SP, RJ, MG, RS, PR, SC, BA, PE, GO, CE, AM, etc.).
+9. Além dos decisores, preencha contato/email/telefone do contato comercial principal da empresa quando possível.
 
 RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
-{"analise":"string (resuma cobertura geográfica e total)","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":["string"],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
+{"analise":"string (resuma cobertura geográfica e total)","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":[{"nome":"string","cargo":"string","email":"string|null","telefone":"string|null"}],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
 
       addLog("[Hunter] Mapeando decisores e certificados...");
 
