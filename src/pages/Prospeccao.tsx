@@ -400,18 +400,20 @@ CERTIFICADOS CRÍTICOS NA BASE (≤ 90 dias):
 ${certContext || "Nenhum certificado crítico na base."}
 
 REGRAS:
-1. Retorne a lista COMPLETA de empresas encontradas que atendam rigorosamente aos critérios. NÃO há limite artificial de quantidade — inclua todas as empresas relevantes.
-2. Priorize empresas com certificado vencendo ou sem certificação OCP ativa.
-3. Identifique se a empresa pode estar com OUTRA OCP concorrente (Bureau Veritas, IMETRO, Inova, etc.).
-4. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2.
-5. motivo: UMA frase estratégica sobre por que abordar AGORA.
-6. Para cada lead, preencher o campo "deep":
+1. ESCOPO GEOGRÁFICO: TODO O BRASIL. Cubra TODAS as regiões (Norte, Nordeste, Centro-Oeste, Sudeste, Sul) — NÃO se limite a São Paulo nem a uma única região, exceto se o usuário pedir explicitamente.
+2. VOLUME: retorne NO MÍNIMO 20 empresas (idealmente 30-50). Não corte a lista — inclua todas as empresas relevantes que conseguir mapear. NÃO há limite artificial.
+3. Priorize empresas com certificado vencendo ou sem certificação OCP ativa.
+4. Identifique se a empresa pode estar com OUTRA OCP concorrente (Bureau Veritas, IMETRO, Inova, etc.).
+5. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2.
+6. motivo: UMA frase estratégica sobre por que abordar AGORA.
+7. Para cada lead, preencher o campo "deep":
    - decisores: array de até 3 nomes com cargo (ex: "João Silva (Dir. Compras)")
    - ocp_concorrente: nome da OCP atual se houver (ou null)
    - certs_inmetro_estimado: número estimado de certificados ativos no INMETRO
+8. Distribua geograficamente: tente incluir empresas de múltiplos estados (SP, RJ, MG, RS, PR, SC, BA, PE, GO, CE, AM, etc.).
 
 RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
-{"analise":"string","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":["string"],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
+{"analise":"string (resuma cobertura geográfica e total)","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":["string"],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
 
       addLog("[Hunter] Mapeando decisores e certificados...");
 
