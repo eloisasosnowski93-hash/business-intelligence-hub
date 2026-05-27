@@ -18,12 +18,16 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
 import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   ShieldCheck, ShieldAlert, ShieldX,
   Target, Loader2, Sparkles,
   Building2, MapPin, AlertTriangle, CheckCircle2,
   ArrowRight, FileSearch, BrainCircuit, Zap,
   Bookmark, BookmarkCheck, Download, Trash2,
   Users, Award, ListChecks, X,
+  HelpCircle, Mail, Phone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMonitoredPortarias } from "@/hooks/useMonitoredPortarias";
