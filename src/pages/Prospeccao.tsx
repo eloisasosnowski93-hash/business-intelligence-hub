@@ -18,12 +18,16 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from "@/components/ui/sheet";
 import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   ShieldCheck, ShieldAlert, ShieldX,
   Target, Loader2, Sparkles,
   Building2, MapPin, AlertTriangle, CheckCircle2,
   ArrowRight, FileSearch, BrainCircuit, Zap,
   Bookmark, BookmarkCheck, Download, Trash2,
   Users, Award, ListChecks, X,
+  HelpCircle, Mail, Phone,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMonitoredPortarias } from "@/hooks/useMonitoredPortarias";
@@ -83,8 +87,16 @@ function criticidadeLabel(dias: number) {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface Decisor {
+  nome: string;
+  cargo?: string;
+  email?: string;
+  telefone?: string;
+  linkedin?: string;
+}
+
 interface DeepHunterData {
-  decisores?: string[];
+  decisores?: Decisor[];
   ocp_concorrente?: string;
   certs_inmetro_estimado?: number;
 }
@@ -106,6 +118,28 @@ interface AILead {
   diasVencimento?: number;
   ocp_atual?: string;
   deep?: DeepHunterData;
+}
+
+// Tooltip clicável com "?" — explica o significado de cada campo/coluna
+function HelpHint({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full text-muted-foreground hover:text-blue-700 transition-colors align-middle"
+          aria-label={`Ajuda: ${title}`}
+        >
+          <HelpCircle className="h-3 w-3" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-64 text-xs leading-relaxed">
+        <p className="font-semibold text-sm mb-1 text-foreground">{title}</p>
+        <div className="text-muted-foreground">{children}</div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -146,12 +180,15 @@ function ScoreDot({ score }: { score: number }) {
 
 function DeepPills({ deep }: { deep?: DeepHunterData }) {
   if (!deep) return null;
+  const firstDecisor = deep.decisores?.[0];
   return (
     <div className="flex flex-wrap gap-1 mt-1.5">
-      {deep.decisores && deep.decisores.length > 0 && (
+      {firstDecisor && (
         <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-100">
           <Users className="h-2.5 w-2.5" />
-          {deep.decisores[0]}{deep.decisores.length > 1 ? ` +${deep.decisores.length - 1}` : ""}
+          {firstDecisor.nome}
+          {firstDecisor.cargo ? ` (${firstDecisor.cargo})` : ""}
+          {deep.decisores!.length > 1 ? ` +${deep.decisores!.length - 1}` : ""}
         </span>
       )}
       {deep.ocp_concorrente && (
@@ -166,6 +203,44 @@ function DeepPills({ deep }: { deep?: DeepHunterData }) {
           ~{deep.certs_inmetro_estimado} certs INMETRO
         </span>
       )}
+    </div>
+  );
+}
+
+// Bloco detalhado de decisores (nome, cargo, e-mail, telefone)
+function DecisoresList({ decisores }: { decisores?: Decisor[] }) {
+  if (!decisores || decisores.length === 0) return null;
+  return (
+    <div className="mt-2 space-y-1">
+      {decisores.slice(0, 3).map((d, i) => (
+        <div
+          key={i}
+          className="text-[10px] bg-purple-50/60 border border-purple-100 rounded px-2 py-1"
+        >
+          <div className="font-semibold text-purple-900 leading-tight">
+            {d.nome}
+            {d.cargo && <span className="font-normal text-purple-700"> — {d.cargo}</span>}
+          </div>
+          <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
+            {d.email && (
+              <a
+                href={`mailto:${d.email}`}
+                className="inline-flex items-center gap-1 text-blue-700 hover:underline"
+              >
+                <Mail className="h-2.5 w-2.5" />{d.email}
+              </a>
+            )}
+            {d.telefone && (
+              <a
+                href={`tel:${d.telefone.replace(/\D/g, "")}`}
+                className="inline-flex items-center gap-1 text-emerald-700 hover:underline"
+              >
+                <Phone className="h-2.5 w-2.5" />{d.telefone}
+              </a>
+            )}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -190,17 +265,24 @@ function ListaContatoDrawer({
     const headers = [
       "empresa","cnpj","cidade","uf","cnae","contato",
       "email","telefone","motivo","score","portaria",
-      "certStatus","ocp_atual","decisores","ocp_concorrente","certs_inmetro_estimado",
+      "certStatus","ocp_atual","decisores","decisores_emails","decisores_telefones",
+      "ocp_concorrente","certs_inmetro_estimado",
     ];
-    const rows = lista.map((l) => [
-      l.empresa, l.cnpj || "", l.cidade || "", l.uf || "", l.cnae || "",
-      l.contato || "", l.email || "", l.telefone || "",
-      `"${(l.motivo || "").replace(/"/g, '""')}"`,
-      l.score, l.portaria, l.certStatus, l.ocp_atual || "",
-      (l.deep?.decisores || []).join("; "),
-      l.deep?.ocp_concorrente || "",
-      l.deep?.certs_inmetro_estimado ?? "",
-    ].join(","));
+    const rows = lista.map((l) => {
+      const decisores = l.deep?.decisores || [];
+      const decisoresStr = decisores.map(d => `${d.nome}${d.cargo ? ` (${d.cargo})` : ""}`).join("; ");
+      const emailsStr = decisores.map(d => d.email).filter(Boolean).join("; ");
+      const telsStr = decisores.map(d => d.telefone).filter(Boolean).join("; ");
+      return [
+        l.empresa, l.cnpj || "", l.cidade || "", l.uf || "", l.cnae || "",
+        l.contato || "", l.email || "", l.telefone || "",
+        `"${(l.motivo || "").replace(/"/g, '""')}"`,
+        l.score, l.portaria, l.certStatus, l.ocp_atual || "",
+        `"${decisoresStr}"`, `"${emailsStr}"`, `"${telsStr}"`,
+        l.deep?.ocp_concorrente || "",
+        l.deep?.certs_inmetro_estimado ?? "",
+      ].join(",");
+    });
     const blob = new Blob(
       [headers.join(",") + "\n" + rows.join("\n")],
       { type: "text/csv;charset=utf-8;" }
@@ -293,6 +375,7 @@ function ListaContatoDrawer({
                       </Badge>
                     </div>
                     {lead.deep && <DeepPills deep={lead.deep} />}
+                    {lead.deep?.decisores && <DecisoresList decisores={lead.deep.decisores} />}
                     <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug line-clamp-2">
                       {lead.motivo}
                     </p>
@@ -407,13 +490,14 @@ REGRAS:
 5. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2.
 6. motivo: UMA frase estratégica sobre por que abordar AGORA.
 7. Para cada lead, preencher o campo "deep":
-   - decisores: array de até 3 nomes com cargo (ex: "João Silva (Dir. Compras)")
+   - decisores: array de até 3 OBJETOS de decisores reais (Diretor Compras, Gerente Qualidade, CEO, Diretor Industrial). Cada objeto DEVE conter: { "nome": "Nome Completo", "cargo": "Cargo", "email": "email corporativo (ex: nome@empresa.com.br) ou null se não souber", "telefone": "telefone com DDD ou null" }. SEMPRE busque inferir e-mails corporativos plausíveis no domínio da empresa quando não tiver fonte direta; marque telefone como null se não houver dado público.
    - ocp_concorrente: nome da OCP atual se houver (ou null)
    - certs_inmetro_estimado: número estimado de certificados ativos no INMETRO
 8. Distribua geograficamente: tente incluir empresas de múltiplos estados (SP, RJ, MG, RS, PR, SC, BA, PE, GO, CE, AM, etc.).
+9. Além dos decisores, preencha contato/email/telefone do contato comercial principal da empresa quando possível.
 
 RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
-{"analise":"string (resuma cobertura geográfica e total)","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":["string"],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
+{"analise":"string (resuma cobertura geográfica e total)","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":[{"nome":"string","cargo":"string","email":"string|null","telefone":"string|null"}],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
 
       addLog("[Hunter] Mapeando decisores e certificados...");
 
@@ -728,13 +812,67 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-xs w-8">#</TableHead>
-                  <TableHead className="text-xs">Empresa + Deep Data</TableHead>
-                  <TableHead className="text-xs">Localização</TableHead>
-                  <TableHead className="text-xs">Motivo Estratégico</TableHead>
-                  <TableHead className="text-xs">Certificação</TableHead>
-                  <TableHead className="text-xs">OCP Atual</TableHead>
-                  <TableHead className="text-xs text-center">Score</TableHead>
-                  <TableHead className="text-xs text-center">Ações</TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      Empresa + Deep Data
+                      <HelpHint title="Empresa + Deep Data">
+                        Nome da empresa, CNPJ, CNAE e dados de inteligência: <b>decisores</b> (nome, cargo, e-mail e telefone), <b>OCP concorrente</b> e <b>nº estimado de certificados INMETRO</b>.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      Localização
+                      <HelpHint title="Localização">
+                        Cidade e UF (Unidade Federativa) onde a empresa está sediada. Usado para distribuir prospecção por região.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      Motivo Estratégico
+                      <HelpHint title="Motivo Estratégico">
+                        Por que esta empresa deve ser abordada AGORA: certificado vencendo, ausência de OCP, oportunidade de migração de concorrente, etc.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      Certificação
+                      <HelpHint title="Status de Certificação INMETRO">
+                        <b>Cliente Scitec</b>: já certificado por nós.<br />
+                        <b>Vence em Xd</b>: certificado próximo do vencimento.<br />
+                        <b>Sem certificação</b>: empresa-alvo sem certificação OCP ativa.<br />
+                        <b>A verificar</b>: status desconhecido — requer pesquisa.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      OCP Atual
+                      <HelpHint title="OCP Atual (concorrente)">
+                        Organismo de Certificação de Produto que atende a empresa hoje (Bureau Veritas, IMETRO, Inova, etc.). Útil para estratégia de migração.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    <span className="inline-flex items-center gap-1">
+                      Score
+                      <HelpHint title="Score de Prospecção (0–10)">
+                        Pontuação automática: CNAE correto +4 · empresa ativa +2 · contato disponível +2 · cert vencendo +2.<br />
+                        <b>🔥 7+</b> quente · <b>⏳ 4–6</b> morno · <b>➕ 0–3</b> frio.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
+                  <TableHead className="text-xs text-center">
+                    <span className="inline-flex items-center gap-1">
+                      Ações
+                      <HelpHint title="Ações">
+                        <b>CRM</b>: envia o lead direto para o pipeline OCP.<br />
+                        <b>Salvar</b>: adiciona à sua Lista de Contato (drawer) para exportar em CSV depois.
+                      </HelpHint>
+                    </span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -759,6 +897,22 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
                             <Badge variant="outline" className="text-[10px] mt-0.5">{lead.cnae}</Badge>
                           )}
                           <DeepPills deep={lead.deep} />
+                          <DecisoresList decisores={lead.deep?.decisores} />
+                          {(lead.contato || lead.email || lead.telefone) && (
+                            <div className="mt-1.5 text-[10px] space-y-0.5">
+                              {lead.contato && <div className="text-muted-foreground">Contato: <span className="text-foreground">{lead.contato}</span></div>}
+                              {lead.email && (
+                                <a href={`mailto:${lead.email}`} className="inline-flex items-center gap-1 text-blue-700 hover:underline mr-2">
+                                  <Mail className="h-2.5 w-2.5" />{lead.email}
+                                </a>
+                              )}
+                              {lead.telefone && (
+                                <a href={`tel:${lead.telefone.replace(/\D/g,"")}`} className="inline-flex items-center gap-1 text-emerald-700 hover:underline">
+                                  <Phone className="h-2.5 w-2.5" />{lead.telefone}
+                                </a>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </TableCell>
