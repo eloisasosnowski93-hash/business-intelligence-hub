@@ -465,85 +465,52 @@ export default function Prospeccao() {
     setHuntLog([]);
 
     try {
-      addLog("🔍 Analisando contexto OCP...");
-      const critAlvos = certAlvos.filter((c) => c.dias <= 90);
-      const certContext = critAlvos.slice(0, 8).map((c) =>
-        `${c.razao_social || c.cnpj_empresa || "—"} | Vence: ${c.dias < 0 ? "VENCIDO" : c.dias + "d"}`
-      ).join("\n");
+      addLog(`🎯 Escopo: ${portariaInfo.label} — ${portariaInfo.desc}`);
+      addLog("🌐 Buscando empresas no Apollo...");
 
-      addLog("🧠 Motor de inteligência processando...");
-
-      const systemPrompt = `Você é o Hunter OCP da Scitec Certificações — especialista em prospecção estratégica de empresas para certificação de produto OCP junto ao INMETRO.
-
-PORTARIA ATIVA: ${portariaInfo.label} — ${portariaInfo.desc}
-CNAEs principais: ${portariaInfo.cnaes.join(", ") || "variados"}
-Responsável Scitec: ${portariaInfo.resp}
-
-CERTIFICADOS CRÍTICOS NA BASE (≤ 90 dias):
-${certContext || "Nenhum certificado crítico na base."}
-
-REGRAS:
-1. ESCOPO GEOGRÁFICO: TODO O BRASIL (todas as regiões), exceto se o usuário pedir explicitamente uma região.
-2. ESCOPO REGULATÓRIO — CRÍTICO: retorne APENAS empresas cujo produto se enquadre EXCLUSIVAMENTE na ${portariaInfo.label} — ${portariaInfo.desc}. CNAEs aceitos ESTRITAMENTE: ${portariaInfo.cnaes.join(", ") || "variados"}. NÃO misture leads de outras portarias (145, 384, 501 e 071 são MUTUAMENTE EXCLUSIVAS nesta busca). Se a empresa não fabrica produto desta portaria específica, NÃO a inclua. O campo "portaria" de TODO lead retornado DEVE ser exatamente "${portariaInfo.value}".
-3. VOLUME: retorne NO MÍNIMO 20 empresas (idealmente 30-50) — todas dentro do escopo da portaria ativa.
-4. Priorize empresas com certificado vencendo ou sem certificação OCP ativa.
-5. Identifique se a empresa pode estar com OUTRA OCP concorrente (Bureau Veritas, IMETRO, Inova, etc.).
-6. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2.
-7. motivo: UMA frase estratégica sobre por que abordar AGORA.
-8. Para cada lead, preencher o campo "deep":
-   - decisores: array de até 3 OBJETOS de decisores reais (Diretor Compras, Gerente Qualidade, CEO, Diretor Industrial). Cada objeto DEVE conter: { "nome": "Nome Completo", "cargo": "Cargo", "email": "email corporativo (ex: nome@empresa.com.br) ou null se não souber", "telefone": "telefone com DDD ou null" }. Infira e-mails corporativos plausíveis no domínio da empresa quando não tiver fonte direta; marque telefone como null se não houver dado público.
-   - ocp_concorrente: nome da OCP atual se houver (ou null)
-   - certs_inmetro_estimado: número estimado de certificados ativos no INMETRO
-9. Distribua geograficamente entre múltiplos estados (SP, RJ, MG, RS, PR, SC, BA, PE, GO, CE, AM, etc.).
-10. Além dos decisores, preencha contato/email/telefone do contato comercial principal da empresa quando possível.
-
-RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
-{"analise":"string (resuma cobertura geográfica e total)","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":[{"nome":"string","cargo":"string","email":"string|null","telefone":"string|null"}],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
-
-      addLog("[Hunter] Mapeando decisores e certificados...");
+      // detecta UF opcional no comando (sigla isolada)
+      const ufMatch = comando.match(/\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/i);
+      const uf = ufMatch ? ufMatch[1].toUpperCase() : undefined;
 
       const { data, error: fnError } = await supabase.functions.invoke("hunt-leads-ocp", {
-        body: { systemPrompt, comando },
+        body: {
+          portaria: {
+            value: portariaInfo.value,
+            numero: portariaInfo.numero,
+            label: portariaInfo.label,
+            desc: portariaInfo.desc,
+            cnaes: [...portariaInfo.cnaes],
+            resp: portariaInfo.resp,
+          },
+          comando,
+          uf,
+        },
       });
 
       if (fnError) throw new Error(fnError.message || "Falha na comunicação com o motor");
-      if (data?.fallback) {
-        toast.warning(data?.error || "Motor temporariamente indisponível — tente novamente em instantes");
-        addLog("⚠️ " + (data?.error || "Motor indisponível"));
+      if (data?.fallback || data?.error) {
+        toast.warning(data?.error || "Falha ao consultar APIs externas");
+        addLog("⚠️ " + (data?.error || "Falha"));
         return;
       }
-      if (data?.error) throw new Error(data.error);
-      addLog("📊 Processando e enriquecendo alvos...");
 
-      const rawText = data?.text || "{}";
+      // emite as stages reais retornadas pela função
+      for (const s of (data?.stages || [])) addLog("• " + s);
 
-      let parsed: { analise?: string; total_encontrado?: number; leads?: AILead[] } = {};
-      const cleaned = rawText.replace(/```json|```/g, "").trim();
-      try {
-        parsed = JSON.parse(cleaned);
-      } catch {
-        const first = cleaned.indexOf("{");
-        const last = cleaned.lastIndexOf("}");
-        if (first !== -1 && last > first) {
-          try { parsed = JSON.parse(cleaned.slice(first, last + 1)); } catch { /* ignore */ }
-        }
-        if (!parsed.leads) {
-          console.error("Raw AI response:", rawText);
-          throw new Error("Resposta do motor inválida — tente reformular o comando (mais curto/específico)");
-        }
-      }
+      const rawLeads: AILead[] = data?.leads || [];
 
-      const leads = (parsed.leads || [])
-        .filter((l: AILead) => !l.portaria || l.portaria === portariaInfo.value)
-        .map((l: AILead) => {
+      // enriquecimento local: cruza com base de certificados Scitec (por CNPJ se houver)
+      const leads = rawLeads
+        .filter((l) => l.portaria === portariaInfo.value)
+        .map((l) => {
           const cnpjClean = (l.cnpj || "").replace(/\D/g, "");
           let certStatus = l.certStatus || "desconhecido";
           if (cnpjClean.length === 14 && certSet.has(cnpjClean)) certStatus = "ativo";
-          return { ...l, portaria: portariaInfo.value, certStatus } as AILead;
+          return { ...l, certStatus } as AILead;
         });
 
-      addLog(`✅ ${leads.length} alvos mapeados com enriquecimento Deep Hunter`);
-      if (parsed.analise) toast.success(parsed.analise, { duration: 8000 });
+      addLog(`✅ ${leads.length} leads reais (Apollo + Hunter) prontos`);
+      if (data?.analise) toast.success(data.analise, { duration: 7000 });
       setAiLeads(leads.sort((a, b) => b.score - a.score));
     } catch (err: any) {
       toast.error(err.message || "Erro no motor");
@@ -552,6 +519,7 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
       setIsHunting(false);
     }
   };
+
 
   const handleSaveLead = async (lead: AILead) => {
     setSavingId(lead.id);
