@@ -64,7 +64,15 @@ export default function Certificacao() {
         toast.error("Falha ao carregar certificados — exibindo lista vazia");
         return [];
       }
-      return (data || []) as Certificado[];
+      // Defesa em profundidade: exibir somente certificados SCITEC,
+      // ignorando registros legados de outros organismos certificadores.
+      const isScitec = (c: any) => {
+        const org = (c.organismo_certificador || "").toString().trim().toUpperCase();
+        const tit = (c.titular || "").toString().toUpperCase();
+        if (org) return org === "SCITEC";
+        return tit.includes("SCITEC");
+      };
+      return ((data || []) as Certificado[]).filter(isScitec);
     },
     retry: 1,
   });
