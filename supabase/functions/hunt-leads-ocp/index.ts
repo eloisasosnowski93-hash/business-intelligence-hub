@@ -11,22 +11,43 @@ Deno.serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY ausente");
 
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: comando },
-        ],
-        max_tokens: 16000,
-        response_format: { type: "json_object" },
-      }),
-    });
+    // Aborta antes do limite de 150s do edge runtime para nunca estourar IDLE_TIMEOUT
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 120_000);
+
+    let res: Response;
+    try {
+      res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          // Modelo mais rápido para evitar timeouts (Pro estava demorando >150s)
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: comando },
+          ],
+          max_tokens: 8000,
+          response_format: { type: "json_object" },
+        }),
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeoutId);
+      const aborted = (fetchErr as Error)?.name === "AbortError";
+      console.error("AI Gateway fetch falhou:", fetchErr);
+      return new Response(JSON.stringify({
+        text: "{}",
+        error: aborted
+          ? "A busca demorou demais e foi interrompida. Refine o comando (menos leads / região menor) e tente novamente."
+          : "Falha ao contatar o motor de IA. Tente novamente.",
+        fallback: true,
+      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    clearTimeout(timeoutId);
 
     if (!res.ok) {
       const errText = await res.text().catch(() => "");
