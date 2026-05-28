@@ -483,18 +483,19 @@ CERTIFICADOS CRÍTICOS NA BASE (≤ 90 dias):
 ${certContext || "Nenhum certificado crítico na base."}
 
 REGRAS:
-1. ESCOPO GEOGRÁFICO: TODO O BRASIL. Cubra TODAS as regiões (Norte, Nordeste, Centro-Oeste, Sudeste, Sul) — NÃO se limite a São Paulo nem a uma única região, exceto se o usuário pedir explicitamente.
-2. VOLUME: retorne NO MÍNIMO 20 empresas (idealmente 30-50). Não corte a lista — inclua todas as empresas relevantes que conseguir mapear. NÃO há limite artificial.
-3. Priorize empresas com certificado vencendo ou sem certificação OCP ativa.
-4. Identifique se a empresa pode estar com OUTRA OCP concorrente (Bureau Veritas, IMETRO, Inova, etc.).
-5. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2.
-6. motivo: UMA frase estratégica sobre por que abordar AGORA.
-7. Para cada lead, preencher o campo "deep":
-   - decisores: array de até 3 OBJETOS de decisores reais (Diretor Compras, Gerente Qualidade, CEO, Diretor Industrial). Cada objeto DEVE conter: { "nome": "Nome Completo", "cargo": "Cargo", "email": "email corporativo (ex: nome@empresa.com.br) ou null se não souber", "telefone": "telefone com DDD ou null" }. SEMPRE busque inferir e-mails corporativos plausíveis no domínio da empresa quando não tiver fonte direta; marque telefone como null se não houver dado público.
+1. ESCOPO GEOGRÁFICO: TODO O BRASIL (todas as regiões), exceto se o usuário pedir explicitamente uma região.
+2. ESCOPO REGULATÓRIO — CRÍTICO: retorne APENAS empresas cujo produto se enquadre EXCLUSIVAMENTE na ${portariaInfo.label} — ${portariaInfo.desc}. CNAEs aceitos ESTRITAMENTE: ${portariaInfo.cnaes.join(", ") || "variados"}. NÃO misture leads de outras portarias (145, 384, 501 e 071 são MUTUAMENTE EXCLUSIVAS nesta busca). Se a empresa não fabrica produto desta portaria específica, NÃO a inclua. O campo "portaria" de TODO lead retornado DEVE ser exatamente "${portariaInfo.value}".
+3. VOLUME: retorne NO MÍNIMO 20 empresas (idealmente 30-50) — todas dentro do escopo da portaria ativa.
+4. Priorize empresas com certificado vencendo ou sem certificação OCP ativa.
+5. Identifique se a empresa pode estar com OUTRA OCP concorrente (Bureau Veritas, IMETRO, Inova, etc.).
+6. Score 0-10: CNAE correto +4, empresa ativa +2, contato disponível +2, cert vencendo +2.
+7. motivo: UMA frase estratégica sobre por que abordar AGORA.
+8. Para cada lead, preencher o campo "deep":
+   - decisores: array de até 3 OBJETOS de decisores reais (Diretor Compras, Gerente Qualidade, CEO, Diretor Industrial). Cada objeto DEVE conter: { "nome": "Nome Completo", "cargo": "Cargo", "email": "email corporativo (ex: nome@empresa.com.br) ou null se não souber", "telefone": "telefone com DDD ou null" }. Infira e-mails corporativos plausíveis no domínio da empresa quando não tiver fonte direta; marque telefone como null se não houver dado público.
    - ocp_concorrente: nome da OCP atual se houver (ou null)
    - certs_inmetro_estimado: número estimado de certificados ativos no INMETRO
-8. Distribua geograficamente: tente incluir empresas de múltiplos estados (SP, RJ, MG, RS, PR, SC, BA, PE, GO, CE, AM, etc.).
-9. Além dos decisores, preencha contato/email/telefone do contato comercial principal da empresa quando possível.
+9. Distribua geograficamente entre múltiplos estados (SP, RJ, MG, RS, PR, SC, BA, PE, GO, CE, AM, etc.).
+10. Além dos decisores, preencha contato/email/telefone do contato comercial principal da empresa quando possível.
 
 RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
 {"analise":"string (resuma cobertura geográfica e total)","total_encontrado":number,"leads":[{"id":"uuid","empresa":"string","cnpj":"string|null","cidade":"string","uf":"string","cnae":"string","contato":"string|null","email":"string|null","telefone":"string|null","motivo":"string","score":number,"portaria":"${portariaInfo.value}","certStatus":"sem_cert|vencendo|ativo|desconhecido","diasVencimento":number|null,"ocp_atual":"string|null","deep":{"decisores":[{"nome":"string","cargo":"string","email":"string|null","telefone":"string|null"}],"ocp_concorrente":"string|null","certs_inmetro_estimado":number}}]}`;
@@ -532,12 +533,14 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
         }
       }
 
-      const leads = (parsed.leads || []).map((l: AILead) => {
-        const cnpjClean = (l.cnpj || "").replace(/\D/g, "");
-        let certStatus = l.certStatus || "desconhecido";
-        if (cnpjClean.length === 14 && certSet.has(cnpjClean)) certStatus = "ativo";
-        return { ...l, certStatus } as AILead;
-      });
+      const leads = (parsed.leads || [])
+        .filter((l: AILead) => !l.portaria || l.portaria === portariaInfo.value)
+        .map((l: AILead) => {
+          const cnpjClean = (l.cnpj || "").replace(/\D/g, "");
+          let certStatus = l.certStatus || "desconhecido";
+          if (cnpjClean.length === 14 && certSet.has(cnpjClean)) certStatus = "ativo";
+          return { ...l, portaria: portariaInfo.value, certStatus } as AILead;
+        });
 
       addLog(`✅ ${leads.length} alvos mapeados com enriquecimento Deep Hunter`);
       if (parsed.analise) toast.success(parsed.analise, { duration: 8000 });
