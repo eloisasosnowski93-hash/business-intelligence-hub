@@ -533,12 +533,14 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
         }
       }
 
-      const leads = (parsed.leads || []).map((l: AILead) => {
-        const cnpjClean = (l.cnpj || "").replace(/\D/g, "");
-        let certStatus = l.certStatus || "desconhecido";
-        if (cnpjClean.length === 14 && certSet.has(cnpjClean)) certStatus = "ativo";
-        return { ...l, certStatus } as AILead;
-      });
+      const leads = (parsed.leads || [])
+        .filter((l: AILead) => !l.portaria || l.portaria === portariaInfo.value)
+        .map((l: AILead) => {
+          const cnpjClean = (l.cnpj || "").replace(/\D/g, "");
+          let certStatus = l.certStatus || "desconhecido";
+          if (cnpjClean.length === 14 && certSet.has(cnpjClean)) certStatus = "ativo";
+          return { ...l, portaria: portariaInfo.value, certStatus } as AILead;
+        });
 
       addLog(`✅ ${leads.length} alvos mapeados com enriquecimento Deep Hunter`);
       if (parsed.analise) toast.success(parsed.analise, { duration: 8000 });
