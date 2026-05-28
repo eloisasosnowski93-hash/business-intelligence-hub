@@ -77,23 +77,8 @@ export default function Certificacao() {
     retry: 1,
   });
 
-  // Auto-sync na primeira carga: dispara varredura SCITEC se a tabela estiver vazia
-  useEffect(() => {
-    (async () => {
-      try {
-        const { count } = await supabase.from("certificados").select("*", { count: "exact", head: true });
-        if ((count ?? 0) === 0) {
-          const { data } = await supabase.functions.invoke("sync-inmetro", { body: {} });
-          if (data?.success) {
-            toast.success(data.message);
-            qc.invalidateQueries({ queryKey: ["certificados"] });
-            qc.invalidateQueries({ queryKey: ["cert-alerts-90d"] });
-          }
-        }
-      } catch (e) { console.warn("auto-sync skipped", e); }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Auto-sync desativado: nunca popular a tabela automaticamente.
+  // Sincronização SCITEC só ocorre por ação explícita do usuário (botão "Sincronizar INMETRO").
 
   const handleAdd = async () => {
     if (!form.numero_certificado || !form.data_validade) {
