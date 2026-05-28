@@ -516,11 +516,20 @@ RESPONDA APENAS JSON VÁLIDO, sem markdown, sem texto fora do JSON:
 
       const rawText = data?.text || "{}";
 
-      let parsed: { analise?: string; total_encontrado?: number; leads?: AILead[] };
+      let parsed: { analise?: string; total_encontrado?: number; leads?: AILead[] } = {};
+      const cleaned = rawText.replace(/```json|```/g, "").trim();
       try {
-        parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
+        parsed = JSON.parse(cleaned);
       } catch {
-        throw new Error("Resposta do motor inválida — tente reformular o comando");
+        const first = cleaned.indexOf("{");
+        const last = cleaned.lastIndexOf("}");
+        if (first !== -1 && last > first) {
+          try { parsed = JSON.parse(cleaned.slice(first, last + 1)); } catch { /* ignore */ }
+        }
+        if (!parsed.leads) {
+          console.error("Raw AI response:", rawText);
+          throw new Error("Resposta do motor inválida — tente reformular o comando (mais curto/específico)");
+        }
       }
 
       const leads = (parsed.leads || []).map((l: AILead) => {
