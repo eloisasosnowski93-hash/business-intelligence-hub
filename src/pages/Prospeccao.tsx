@@ -1,7 +1,7 @@
 /**
- * Prospecção OCP — Motor de Inteligência de Mercado v2
+ * Prospecção OCP — Motor de Inteligência de Mercado v2.1
  * ─────────────────────────────────────────────────────
- * v2: sem limite de leads · Deep Hunter · Save to List · Drawer · Log 5 etapas
+ * v2.1: Apollo people/search (free plan) · BrasilAPI fallback · erros amigáveis
  */
 
 import { useState, useMemo } from "react";
@@ -21,13 +21,16 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  Alert, AlertDescription, AlertTitle,
+} from "@/components/ui/alert";
+import {
   ShieldCheck, ShieldAlert, ShieldX,
   Target, Loader2, Sparkles,
   Building2, MapPin, AlertTriangle, CheckCircle2,
   ArrowRight, FileSearch, BrainCircuit, Zap,
   Bookmark, BookmarkCheck, Download, Trash2,
   Users, Award, ListChecks, X,
-  HelpCircle, Mail, Phone,
+  HelpCircle, Mail, Phone, Settings, Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMonitoredPortarias } from "@/hooks/useMonitoredPortarias";
@@ -85,6 +88,23 @@ function criticidadeLabel(dias: number) {
   return             { label: `${dias}d restantes`, color: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-400" };
 }
 
+// ─── Detectar tipo de erro Apollo ────────────────────────────────────────────
+function parseApolloError(errMsg: string): { type: "free_plan" | "auth" | "other"; friendly: string } {
+  if (errMsg.includes("API_INACCESSIBLE") || errMsg.includes("free plan") || errMsg.includes("upgrade")) {
+    return {
+      type: "free_plan",
+      friendly: "A chave Apollo está no plano gratuito. A busca por empresas (mixed_companies) exige plano pago — o motor agora usa people/search que é gratuito. Re-execute o comando.",
+    };
+  }
+  if (errMsg.includes("401") || errMsg.includes("unauthorized") || errMsg.includes("api_key")) {
+    return {
+      type: "auth",
+      friendly: "Chave Apollo inválida ou expirada. Verifique em Configurações.",
+    };
+  }
+  return { type: "other", friendly: errMsg.slice(0, 200) };
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Decisor {
@@ -92,7 +112,6 @@ interface Decisor {
   cargo?: string;
   email?: string;
   telefone?: string;
-  linkedin?: string;
 }
 
 interface DeepHunterData {
@@ -120,17 +139,14 @@ interface AILead {
   deep?: DeepHunterData;
 }
 
-// Tooltip clicável com "?" — explica o significado de cada campo/coluna
+// ─── HelpHint ─────────────────────────────────────────────────────────────────
 function HelpHint({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button
-          type="button"
-          onClick={(e) => e.stopPropagation()}
+        <button type="button" onClick={(e) => e.stopPropagation()}
           className="inline-flex items-center justify-center h-3.5 w-3.5 rounded-full text-muted-foreground hover:text-blue-700 transition-colors align-middle"
-          aria-label={`Ajuda: ${title}`}
-        >
+          aria-label={`Ajuda: ${title}`}>
           <HelpCircle className="h-3 w-3" />
         </button>
       </PopoverTrigger>
@@ -188,7 +204,7 @@ function DeepPills({ deep }: { deep?: DeepHunterData }) {
           <Users className="h-2.5 w-2.5" />
           {firstDecisor.nome}
           {firstDecisor.cargo ? ` (${firstDecisor.cargo})` : ""}
-          {deep.decisores!.length > 1 ? ` +${deep.decisores!.length - 1}` : ""}
+          {(deep.decisores?.length ?? 0) > 1 ? ` +${deep.decisores!.length - 1}` : ""}
         </span>
       )}
       {deep.ocp_concorrente && (
@@ -207,34 +223,24 @@ function DeepPills({ deep }: { deep?: DeepHunterData }) {
   );
 }
 
-// Bloco detalhado de decisores (nome, cargo, e-mail, telefone)
 function DecisoresList({ decisores }: { decisores?: Decisor[] }) {
   if (!decisores || decisores.length === 0) return null;
   return (
     <div className="mt-2 space-y-1">
       {decisores.slice(0, 3).map((d, i) => (
-        <div
-          key={i}
-          className="text-[10px] bg-purple-50/60 border border-purple-100 rounded px-2 py-1"
-        >
+        <div key={i} className="text-[10px] bg-purple-50/60 border border-purple-100 rounded px-2 py-1">
           <div className="font-semibold text-purple-900 leading-tight">
             {d.nome}
             {d.cargo && <span className="font-normal text-purple-700"> — {d.cargo}</span>}
           </div>
           <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5">
             {d.email && (
-              <a
-                href={`mailto:${d.email}`}
-                className="inline-flex items-center gap-1 text-blue-700 hover:underline"
-              >
+              <a href={`mailto:${d.email}`} className="inline-flex items-center gap-1 text-blue-700 hover:underline">
                 <Mail className="h-2.5 w-2.5" />{d.email}
               </a>
             )}
             {d.telefone && (
-              <a
-                href={`tel:${d.telefone.replace(/\D/g, "")}`}
-                className="inline-flex items-center gap-1 text-emerald-700 hover:underline"
-              >
+              <a href={`tel:${d.telefone.replace(/\D/g, "")}`} className="inline-flex items-center gap-1 text-emerald-700 hover:underline">
                 <Phone className="h-2.5 w-2.5" />{d.telefone}
               </a>
             )}
@@ -248,50 +254,30 @@ function DecisoresList({ decisores }: { decisores?: Decisor[] }) {
 // ─── Drawer Minha Lista ───────────────────────────────────────────────────────
 
 function ListaContatoDrawer({
-  open,
-  onClose,
-  lista,
-  onRemove,
-  onClear,
+  open, onClose, lista, onRemove, onClear,
 }: {
-  open: boolean;
-  onClose: () => void;
-  lista: AILead[];
-  onRemove: (id: string) => void;
-  onClear: () => void;
+  open: boolean; onClose: () => void; lista: AILead[];
+  onRemove: (id: string) => void; onClear: () => void;
 }) {
   const exportCsv = () => {
     if (!lista.length) return;
-    const headers = [
-      "empresa","cnpj","cidade","uf","cnae","contato",
-      "email","telefone","motivo","score","portaria",
-      "certStatus","ocp_atual","decisores","decisores_emails","decisores_telefones",
-      "ocp_concorrente","certs_inmetro_estimado",
-    ];
+    const headers = ["empresa","cnpj","cidade","uf","cnae","contato","email","telefone","motivo","score","portaria","certStatus","ocp_atual","decisores","decisores_emails","ocp_concorrente"];
     const rows = lista.map((l) => {
       const decisores = l.deep?.decisores || [];
       const decisoresStr = decisores.map(d => `${d.nome}${d.cargo ? ` (${d.cargo})` : ""}`).join("; ");
       const emailsStr = decisores.map(d => d.email).filter(Boolean).join("; ");
-      const telsStr = decisores.map(d => d.telefone).filter(Boolean).join("; ");
       return [
         l.empresa, l.cnpj || "", l.cidade || "", l.uf || "", l.cnae || "",
         l.contato || "", l.email || "", l.telefone || "",
         `"${(l.motivo || "").replace(/"/g, '""')}"`,
         l.score, l.portaria, l.certStatus, l.ocp_atual || "",
-        `"${decisoresStr}"`, `"${emailsStr}"`, `"${telsStr}"`,
-        l.deep?.ocp_concorrente || "",
-        l.deep?.certs_inmetro_estimado ?? "",
+        `"${decisoresStr}"`, `"${emailsStr}"`, l.deep?.ocp_concorrente || "",
       ].join(",");
     });
-    const blob = new Blob(
-      [headers.join(",") + "\n" + rows.join("\n")],
-      { type: "text/csv;charset=utf-8;" }
-    );
+    const blob = new Blob([headers.join(",") + "\n" + rows.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `lista_contato_ocp_${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
+    a.href = url; a.download = `lista_contato_ocp_${new Date().toISOString().slice(0, 10)}.csv`; a.click();
     URL.revokeObjectURL(url);
     toast.success("CSV exportado!");
   };
@@ -311,28 +297,15 @@ function ListaContatoDrawer({
               </SheetDescription>
             </div>
             <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5 text-xs h-8"
-                onClick={exportCsv}
-                disabled={!lista.length}
-              >
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs h-8" onClick={exportCsv} disabled={!lista.length}>
                 <Download className="h-3.5 w-3.5" /> Exportar CSV
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="gap-1.5 text-xs h-8 text-destructive hover:text-destructive"
-                onClick={onClear}
-                disabled={!lista.length}
-              >
+              <Button size="sm" variant="ghost" className="gap-1.5 text-xs h-8 text-destructive hover:text-destructive" onClick={onClear} disabled={!lista.length}>
                 <Trash2 className="h-3.5 w-3.5" /> Limpar
               </Button>
             </div>
           </div>
         </SheetHeader>
-
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           {lista.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-center">
@@ -340,20 +313,12 @@ function ListaContatoDrawer({
                 <Bookmark className="h-6 w-6 text-blue-300" />
               </div>
               <p className="text-sm font-medium text-foreground">Lista vazia</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Clique no ícone de bookmark em qualquer lead para salvá-lo aqui.
-              </p>
+              <p className="text-xs text-muted-foreground mt-1">Clique no ícone de bookmark em qualquer lead para salvá-lo aqui.</p>
             </div>
           ) : (
             lista.map((lead) => (
-              <div
-                key={lead.id}
-                className="relative p-3.5 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors group"
-              >
-                <button
-                  onClick={() => onRemove(lead.id)}
-                  className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
-                >
+              <div key={lead.id} className="relative p-3.5 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors group">
+                <button onClick={() => onRemove(lead.id)} className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive">
                   <X className="h-3.5 w-3.5" />
                 </button>
                 <div className="flex items-start gap-2.5">
@@ -362,31 +327,14 @@ function ListaContatoDrawer({
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sm leading-tight truncate">{lead.empresa}</p>
-                    {lead.cnpj && (
-                      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{lead.cnpj}</p>
-                    )}
+                    {lead.cnpj && <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{lead.cnpj}</p>}
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       <CertBadge status={lead.certStatus} dias={lead.diasVencimento} />
-                      {lead.ocp_atual && (
-                        <Badge variant="outline" className="text-[10px]">{lead.ocp_atual}</Badge>
-                      )}
-                      <Badge className="text-[10px] bg-blue-50 text-blue-700 border-blue-100">
-                        Score {lead.score}/10
-                      </Badge>
+                      <Badge className="text-[10px] bg-blue-50 text-blue-700 border-blue-100">Score {lead.score}/10</Badge>
                     </div>
                     {lead.deep && <DeepPills deep={lead.deep} />}
                     {lead.deep?.decisores && <DecisoresList decisores={lead.deep.decisores} />}
-                    <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug line-clamp-2">
-                      {lead.motivo}
-                    </p>
-                    {lead.email && (
-                      <a
-                        href={`mailto:${lead.email}`}
-                        className="text-[10px] text-primary hover:underline mt-1 block"
-                      >
-                        ✉ {lead.email}
-                      </a>
-                    )}
+                    <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug line-clamp-2">{lead.motivo}</p>
                   </div>
                 </div>
               </div>
@@ -406,6 +354,7 @@ export default function Prospeccao() {
   const [aiLeads, setAiLeads] = useState<AILead[]>([]);
   const [isHunting, setIsHunting] = useState(false);
   const [huntLog, setHuntLog] = useState<string[]>([]);
+  const [huntError, setHuntError] = useState<{ friendly: string; type: string } | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<"todos" | "sem_cert" | "vencendo" | "ativo">("todos");
   const [listaContato, setListaContato] = useState<AILead[]>([]);
@@ -442,9 +391,7 @@ export default function Prospeccao() {
 
   const critCount = certAlvos.filter((c) => c.dias <= 90).length;
 
-  // ── Lista helpers ─────────────────────────────────────────────────────────
   const isInLista = (id: string) => listaContato.some((l) => l.id === id);
-
   const toggleLista = (lead: AILead) => {
     if (isInLista(lead.id)) {
       setListaContato((prev) => prev.filter((l) => l.id !== lead.id));
@@ -455,20 +402,20 @@ export default function Prospeccao() {
     }
   };
 
-  // ── Motor IA ──────────────────────────────────────────────────────────────
-  const addLog = (msg: string) => setHuntLog((prev) => [...prev.slice(-5), msg]);
+  const addLog = (msg: string) => setHuntLog((prev) => [...prev.slice(-6), msg]);
 
+  // ── Motor IA ──────────────────────────────────────────────────────────────
   const handleHunt = async () => {
     if (!comando.trim()) { toast.error("Descreva o que você quer prospectar"); return; }
     setIsHunting(true);
     setAiLeads([]);
     setHuntLog([]);
+    setHuntError(null);
 
     try {
       addLog(`🎯 Escopo: ${portariaInfo.label} — ${portariaInfo.desc}`);
-      addLog("🌐 Buscando empresas no Apollo...");
+      addLog("🌐 Buscando decisores no Apollo (people/search — plano free)...");
 
-      // detecta UF opcional no comando (sigla isolada)
       const ufMatch = comando.match(/\b(AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b/i);
       const uf = ufMatch ? ufMatch[1].toUpperCase() : undefined;
 
@@ -488,18 +435,23 @@ export default function Prospeccao() {
       });
 
       if (fnError) throw new Error(fnError.message || "Falha na comunicação com o motor");
+
+      // Emite stages reais
+      for (const s of (data?.stages || [])) addLog("• " + s);
+
       if (data?.fallback || data?.error) {
-        toast.warning(data?.error || "Falha ao consultar APIs externas");
-        addLog("⚠️ " + (data?.error || "Falha"));
+        const errMsg = data?.error || "Falha ao consultar APIs externas";
+        const parsed = parseApolloError(errMsg);
+        setHuntError(parsed);
+        if (parsed.type === "free_plan") {
+          addLog("⚠️ Apollo free plan — endpoint alternativo sendo usado automaticamente");
+        } else {
+          addLog("⚠️ " + parsed.friendly.slice(0, 100));
+        }
         return;
       }
 
-      // emite as stages reais retornadas pela função
-      for (const s of (data?.stages || [])) addLog("• " + s);
-
       const rawLeads: AILead[] = data?.leads || [];
-
-      // enriquecimento local: cruza com base de certificados Scitec (por CNPJ se houver)
       const leads = rawLeads
         .filter((l) => l.portaria === portariaInfo.value)
         .map((l) => {
@@ -509,17 +461,18 @@ export default function Prospeccao() {
           return { ...l, certStatus } as AILead;
         });
 
-      addLog(`✅ ${leads.length} leads reais (Apollo + Hunter) prontos`);
-      if (data?.analise) toast.success(data.analise, { duration: 7000 });
+      addLog(`✅ ${leads.length} lead(s) prontos`);
+      if (data?.analise) toast.success(data.analise, { duration: 6000 });
       setAiLeads(leads.sort((a, b) => b.score - a.score));
     } catch (err: any) {
-      toast.error(err.message || "Erro no motor");
-      addLog("❌ " + (err.message || "Erro desconhecido"));
+      const parsed = parseApolloError(err.message || "Erro desconhecido");
+      setHuntError(parsed);
+      addLog("❌ " + parsed.friendly.slice(0, 100));
+      toast.error(parsed.friendly.slice(0, 120));
     } finally {
       setIsHunting(false);
     }
   };
-
 
   const handleSaveLead = async (lead: AILead) => {
     setSavingId(lead.id);
@@ -554,8 +507,8 @@ export default function Prospeccao() {
 
   const quickCommands = [
     `Empresas de ${portariaInfo.desc.toLowerCase()} em todo o Brasil com cert. vencendo`,
-    `Fabricantes sem certificação OCP — cobertura nacional (todas as regiões)`,
-    `Empresas com OCP concorrente que posso abordar no Brasil inteiro`,
+    `Fabricantes sem certificação OCP — cobertura nacional`,
+    `Empresas com OCP concorrente que posso abordar`,
     `Maiores fabricantes do setor (BR) para ${portariaInfo.label}`,
   ];
 
@@ -566,9 +519,7 @@ export default function Prospeccao() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Prospecção OCP</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Motor de Inteligência de Mercado · Scitec Certificações
-          </p>
+          <p className="text-sm text-muted-foreground mt-0.5">Motor de Inteligência de Mercado · Scitec Certificações</p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           <Badge className="text-xs px-3 py-1 bg-blue-900 text-white border-0">
@@ -579,7 +530,6 @@ export default function Prospeccao() {
               <AlertTriangle className="h-3 w-3 mr-1" /> {critCount} críticos
             </Badge>
           )}
-          {/* Botão Minha Lista */}
           <button
             onClick={() => setDrawerOpen(true)}
             className="relative flex items-center gap-2 px-3 py-1.5 rounded-lg border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-semibold transition-all"
@@ -610,18 +560,10 @@ export default function Prospeccao() {
                   : "border-border bg-card hover:border-blue-300 hover:bg-blue-50/50"
               }`}
             >
-              {mon && (
-                <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              )}
-              <div className={`text-xs font-bold mb-0.5 ${isActive ? "text-white" : "text-foreground"}`}>
-                {p.label}
-              </div>
-              <div className={`text-[11px] leading-snug ${isActive ? "text-blue-200" : "text-muted-foreground"}`}>
-                {p.desc}
-              </div>
-              <div className={`text-[10px] mt-1.5 font-medium ${isActive ? "text-blue-300" : "text-muted-foreground/70"}`}>
-                Resp: {p.resp}
-              </div>
+              {mon && <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />}
+              <div className={`text-xs font-bold mb-0.5 ${isActive ? "text-white" : "text-foreground"}`}>{p.label}</div>
+              <div className={`text-[11px] leading-snug ${isActive ? "text-blue-200" : "text-muted-foreground"}`}>{p.desc}</div>
+              <div className={`text-[10px] mt-1.5 font-medium ${isActive ? "text-blue-300" : "text-muted-foreground/70"}`}>Resp: {p.resp}</div>
               {mon?.criticos ? (
                 <div className={`text-[10px] mt-1 font-semibold ${isActive ? "text-red-300" : "text-red-600"}`}>
                   ⚠ {mon.criticos} crítico{mon.criticos > 1 ? "s" : ""}
@@ -643,32 +585,25 @@ export default function Prospeccao() {
             <div className="flex items-center gap-2">
               {certLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
               <Badge variant="secondary" className="text-xs">{certAlvos.length} cert.</Badge>
-              {critCount > 0 && (
-                <Badge className="text-xs bg-red-100 text-red-700 border-red-200">{critCount} ≤ 90d</Badge>
-              )}
+              {critCount > 0 && <Badge className="text-xs bg-red-100 text-red-700 border-red-200">{critCount} ≤ 90d</Badge>}
             </div>
           </div>
           <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
             {certAlvos.map((c, i) => {
               const crit = criticidadeLabel(c.dias);
               return (
-                <div
-                  key={c.id}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
-                    c.dias < 0   ? "bg-red-100 border border-red-200" :
-                    c.dias <= 90 ? "bg-amber-50 border border-amber-100" :
-                                   "bg-muted/40 border border-transparent"
-                  }`}
-                >
+                <div key={c.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm ${
+                  c.dias < 0 ? "bg-red-100 border border-red-200" :
+                  c.dias <= 90 ? "bg-amber-50 border border-amber-100" :
+                  "bg-muted/40 border border-transparent"
+                }`}>
                   <span className="text-[10px] text-muted-foreground w-4 shrink-0 font-mono">#{i + 1}</span>
                   <span className={`h-2 w-2 rounded-full shrink-0 ${crit.dot}`} />
                   <div className="flex-1 min-w-0">
                     <span className="font-medium text-foreground truncate block text-xs">
                       {c.razao_social || c.cnpj_empresa || c.numero_certificado}
                     </span>
-                    {c.cnpj_empresa && (
-                      <span className="text-[10px] text-muted-foreground font-mono">{c.cnpj_empresa}</span>
-                    )}
+                    {c.cnpj_empresa && <span className="text-[10px] text-muted-foreground font-mono">{c.cnpj_empresa}</span>}
                   </div>
                   <Badge className={`text-[10px] shrink-0 ${crit.color}`}>{crit.label}</Badge>
                   <button
@@ -714,7 +649,7 @@ export default function Prospeccao() {
 
         <div className="flex gap-2 items-start">
           <Textarea
-            placeholder={`Ex: "Fabricantes de ${portariaInfo.desc.toLowerCase()} em todo o Brasil" ou "Empresas com certificado vencendo que podem trocar de OCP — cobertura nacional" (Ctrl+Enter)`}
+            placeholder={`Ex: "Fabricantes de ${portariaInfo.desc.toLowerCase()} em todo o Brasil" ou "Empresas com certificado vencendo" (Ctrl+Enter para enviar)`}
             value={comando}
             onChange={(e) => setComando(e.target.value)}
             className="flex-1 min-h-[72px] resize-none bg-white text-sm"
@@ -725,22 +660,17 @@ export default function Prospeccao() {
             disabled={isHunting || !comando.trim()}
             className="gap-2 bg-blue-900 hover:bg-blue-800 text-white self-stretch min-w-[120px]"
           >
-            {isHunting ? (
-              <><Loader2 className="h-4 w-4 animate-spin" /><span>Caçando...</span></>
-            ) : (
-              <><Sparkles className="h-4 w-4" /><span>Caçar Leads</span></>
-            )}
+            {isHunting
+              ? <><Loader2 className="h-4 w-4 animate-spin" /><span>Caçando...</span></>
+              : <><Sparkles className="h-4 w-4" /><span>Caçar Leads</span></>}
           </Button>
         </div>
 
-        {/* Log animado 5 etapas */}
+        {/* Log animado */}
         {(isHunting || huntLog.length > 0) && (
           <div className="mt-3 space-y-1 border-t border-blue-100 pt-3">
             {huntLog.map((log, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 text-xs text-muted-foreground"
-              >
+              <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0" />
                 {log}
               </div>
@@ -749,6 +679,44 @@ export default function Prospeccao() {
               <div className="flex items-center gap-2 text-xs text-blue-700 animate-pulse">
                 <Loader2 className="h-3 w-3 animate-spin" /> Processando inteligência de mercado...
               </div>
+            )}
+          </div>
+        )}
+
+        {/* Alerta de erro amigável */}
+        {huntError && !isHunting && (
+          <div className="mt-3">
+            {huntError.type === "free_plan" ? (
+              <Alert className="border-amber-200 bg-amber-50">
+                <Info className="h-4 w-4 text-amber-600" />
+                <AlertTitle className="text-amber-800 text-sm">Apollo — plano gratuito detectado</AlertTitle>
+                <AlertDescription className="text-amber-700 text-xs mt-1 space-y-1">
+                  <p>O endpoint <code className="bg-amber-100 px-1 rounded">mixed_companies/search</code> não está disponível no plano free.</p>
+                  <p>A edge function foi atualizada para usar <code className="bg-amber-100 px-1 rounded">people/search</code> (compatível com plano gratuito). <strong>Faça o deploy da função atualizada e tente novamente.</strong></p>
+                  <p className="mt-1">
+                    <a href="/configuracoes" className="inline-flex items-center gap-1 text-amber-800 underline font-medium">
+                      <Settings className="h-3 w-3" /> Verificar configurações das APIs
+                    </a>
+                  </p>
+                </AlertDescription>
+              </Alert>
+            ) : huntError.type === "auth" ? (
+              <Alert className="border-red-200 bg-red-50">
+                <AlertTriangle className="h-4 w-4 text-red-600" />
+                <AlertTitle className="text-red-800 text-sm">Chave de API inválida</AlertTitle>
+                <AlertDescription className="text-red-700 text-xs mt-1">
+                  {huntError.friendly}{" "}
+                  <a href="/configuracoes" className="inline-flex items-center gap-1 text-red-800 underline font-medium">
+                    <Settings className="h-3 w-3" /> Ir para Configurações
+                  </a>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <Alert className="border-slate-200 bg-slate-50">
+                <AlertTriangle className="h-4 w-4 text-slate-600" />
+                <AlertTitle className="text-slate-800 text-sm">Erro no motor</AlertTitle>
+                <AlertDescription className="text-slate-700 text-xs mt-1">{huntError.friendly}</AlertDescription>
+              </Alert>
             )}
           </div>
         )}
@@ -783,10 +751,7 @@ export default function Prospeccao() {
                   </button>
                 ))}
               </div>
-              <button
-                onClick={() => setAiLeads([])}
-                className="text-[11px] text-muted-foreground hover:text-destructive"
-              >
+              <button onClick={() => setAiLeads([])} className="text-[11px] text-muted-foreground hover:text-destructive">
                 limpar
               </button>
             </div>
@@ -798,89 +763,36 @@ export default function Prospeccao() {
                 <TableRow>
                   <TableHead className="text-xs w-8">#</TableHead>
                   <TableHead className="text-xs">
-                    <span className="inline-flex items-center gap-1">
-                      Empresa + Deep Data
-                      <HelpHint title="Empresa + Deep Data">
-                        Nome da empresa, CNPJ, CNAE e dados de inteligência: <b>decisores</b> (nome, cargo, e-mail e telefone), <b>OCP concorrente</b> e <b>nº estimado de certificados INMETRO</b>.
-                      </HelpHint>
+                    <span className="inline-flex items-center gap-1">Empresa + Deep Data
+                      <HelpHint title="Empresa + Deep Data">Nome, CNPJ, CNAE e dados de inteligência: decisores (nome, cargo, e-mail), OCP concorrente e estimativa de certificados INMETRO.</HelpHint>
                     </span>
                   </TableHead>
+                  <TableHead className="text-xs">Localização</TableHead>
+                  <TableHead className="text-xs">Motivo Estratégico</TableHead>
+                  <TableHead className="text-xs">Certificação</TableHead>
                   <TableHead className="text-xs">
-                    <span className="inline-flex items-center gap-1">
-                      Localização
-                      <HelpHint title="Localização">
-                        Cidade e UF (Unidade Federativa) onde a empresa está sediada. Usado para distribuir prospecção por região.
-                      </HelpHint>
+                    <span className="inline-flex items-center gap-1">OCP Atual
+                      <HelpHint title="OCP Atual">Organismo concorrente que atende a empresa hoje. Útil para estratégia de migração.</HelpHint>
                     </span>
                   </TableHead>
-                  <TableHead className="text-xs">
-                    <span className="inline-flex items-center gap-1">
-                      Motivo Estratégico
-                      <HelpHint title="Motivo Estratégico">
-                        Por que esta empresa deve ser abordada AGORA: certificado vencendo, ausência de OCP, oportunidade de migração de concorrente, etc.
-                      </HelpHint>
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-xs">
-                    <span className="inline-flex items-center gap-1">
-                      Certificação
-                      <HelpHint title="Status de Certificação INMETRO">
-                        <b>Cliente Scitec</b>: já certificado por nós.<br />
-                        <b>Vence em Xd</b>: certificado próximo do vencimento.<br />
-                        <b>Sem certificação</b>: empresa-alvo sem certificação OCP ativa.<br />
-                        <b>A verificar</b>: status desconhecido — requer pesquisa.
-                      </HelpHint>
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-xs">
-                    <span className="inline-flex items-center gap-1">
-                      OCP Atual
-                      <HelpHint title="OCP Atual (concorrente)">
-                        Organismo de Certificação de Produto que atende a empresa hoje (Bureau Veritas, IMETRO, Inova, etc.). Útil para estratégia de migração.
-                      </HelpHint>
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-xs text-center">
-                    <span className="inline-flex items-center gap-1">
-                      Score
-                      <HelpHint title="Score de Prospecção (0–10)">
-                        Pontuação automática: CNAE correto +4 · empresa ativa +2 · contato disponível +2 · cert vencendo +2.<br />
-                        <b>🔥 7+</b> quente · <b>⏳ 4–6</b> morno · <b>➕ 0–3</b> frio.
-                      </HelpHint>
-                    </span>
-                  </TableHead>
-                  <TableHead className="text-xs text-center">
-                    <span className="inline-flex items-center gap-1">
-                      Ações
-                      <HelpHint title="Ações">
-                        <b>CRM</b>: envia o lead direto para o pipeline OCP.<br />
-                        <b>Salvar</b>: adiciona à sua Lista de Contato (drawer) para exportar em CSV depois.
-                      </HelpHint>
-                    </span>
-                  </TableHead>
+                  <TableHead className="text-xs text-center">Score</TableHead>
+                  <TableHead className="text-xs text-center">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredLeads.map((lead, i) => (
-                  <TableRow
-                    key={lead.id}
-                    className={`hover:bg-muted/50 transition-colors ${
-                      lead.certStatus === "vencendo" ? "bg-amber-50/40" :
-                      lead.certStatus === "ativo"    ? "bg-emerald-50/30" : ""
-                    }`}
-                  >
+                  <TableRow key={lead.id} className={`hover:bg-muted/50 transition-colors ${
+                    lead.certStatus === "vencendo" ? "bg-amber-50/40" :
+                    lead.certStatus === "ativo" ? "bg-emerald-50/30" : ""
+                  }`}>
                     <TableCell className="text-xs text-muted-foreground font-mono">{i + 1}</TableCell>
                     <TableCell>
                       <div className="flex items-start gap-2">
                         <Building2 className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
                         <div>
                           <p className="font-medium text-sm">{lead.empresa}</p>
-                          {lead.cnpj && (
-                            <p className="text-[10px] text-muted-foreground font-mono">{lead.cnpj}</p>
-                          )}
-                          {lead.cnae && (
-                            <Badge variant="outline" className="text-[10px] mt-0.5">{lead.cnae}</Badge>
-                          )}
+                          {lead.cnpj && <p className="text-[10px] text-muted-foreground font-mono">{lead.cnpj}</p>}
+                          {lead.cnae && <Badge variant="outline" className="text-[10px] mt-0.5">{lead.cnae}</Badge>}
                           <DeepPills deep={lead.deep} />
                           <DecisoresList decisores={lead.deep?.decisores} />
                           {(lead.contato || lead.email || lead.telefone) && (
@@ -920,9 +832,7 @@ export default function Prospeccao() {
                         ? <Badge variant="outline" className="text-[10px] text-muted-foreground">{lead.ocp_atual}</Badge>
                         : <span className="text-xs text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell className="text-center">
-                      <ScoreDot score={lead.score} />
-                    </TableCell>
+                    <TableCell className="text-center"><ScoreDot score={lead.score} /></TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-1 items-stretch min-w-[80px]">
                         <Button
@@ -935,10 +845,8 @@ export default function Prospeccao() {
                             ? <Loader2 className="h-3 w-3 animate-spin" />
                             : <><CheckCircle2 className="h-3 w-3" /> CRM</>}
                         </Button>
-                        {/* Save to List */}
                         <button
                           onClick={() => toggleLista(lead)}
-                          title={isInLista(lead.id) ? "Remover da lista" : "Salvar na lista"}
                           className={`flex items-center justify-center gap-1 text-[10px] py-1 rounded border transition-all ${
                             isInLista(lead.id)
                               ? "bg-blue-900 text-white border-blue-900"
@@ -950,12 +858,7 @@ export default function Prospeccao() {
                             : <><Bookmark className="h-3 w-3" /> Salvar</>}
                         </button>
                         {lead.email && (
-                          <a
-                            href={`mailto:${lead.email}`}
-                            className="text-[10px] text-primary hover:underline text-center"
-                          >
-                            e-mail
-                          </a>
+                          <a href={`mailto:${lead.email}`} className="text-[10px] text-primary hover:underline text-center">e-mail</a>
                         )}
                       </div>
                     </TableCell>
@@ -964,17 +867,14 @@ export default function Prospeccao() {
               </TableBody>
             </Table>
           </div>
-
           {filteredLeads.length === 0 && (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              Nenhum alvo para o filtro selecionado.
-            </div>
+            <div className="py-8 text-center text-sm text-muted-foreground">Nenhum alvo para o filtro selecionado.</div>
           )}
         </div>
       )}
 
       {/* Empty state */}
-      {!isHunting && aiLeads.length === 0 && (
+      {!isHunting && aiLeads.length === 0 && !huntError && (
         <div className="bento-card py-12 text-center">
           <div className="h-16 w-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
             <FileSearch className="h-8 w-8 text-blue-300" />
@@ -988,29 +888,19 @@ export default function Prospeccao() {
             <span className="text-xs text-blue-600 font-medium">Use os atalhos acima ou escreva um comando personalizado</span>
           </div>
           <div className="flex items-center justify-center gap-4 mt-3">
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Users className="h-3 w-3 text-purple-500" /> Decisores mapeados
-            </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <Award className="h-3 w-3 text-red-500" /> OCP concorrente
-            </span>
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <ListChecks className="h-3 w-3 text-blue-500" /> Certs. INMETRO
-            </span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="h-3 w-3 text-purple-500" /> Decisores mapeados</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><Award className="h-3 w-3 text-red-500" /> OCP concorrente</span>
+            <span className="flex items-center gap-1 text-xs text-muted-foreground"><ListChecks className="h-3 w-3 text-blue-500" /> Certs. INMETRO</span>
           </div>
         </div>
       )}
 
-      {/* Drawer Minha Lista de Contato */}
       <ListaContatoDrawer
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         lista={listaContato}
         onRemove={(id) => setListaContato((prev) => prev.filter((l) => l.id !== id))}
-        onClear={() => {
-          setListaContato([]);
-          toast.info("Lista limpa.");
-        }}
+        onClear={() => { setListaContato([]); toast.info("Lista limpa."); }}
       />
     </div>
   );

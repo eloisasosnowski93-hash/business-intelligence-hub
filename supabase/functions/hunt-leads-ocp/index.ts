@@ -1,5 +1,5 @@
-// hunt-leads-ocp — busca REAL via Apollo.io + Hunter.io
-// Sem mock. Sem IA inventando empresas. Retorna leads dinâmicos baseados em portaria/CNAE/comando.
+// hunt-leads-ocp — Apollo /v1/people/search (plano free) + BrasilAPI fallback
+// O endpoint mixed_companies/search exige plano pago → substituído por people/search.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -45,35 +45,55 @@ interface OutLead {
   };
 }
 
-// Mapa de portaria -> palavras-chave Apollo (segmentação de mercado)
+// ── Palavras-chave por portaria (para busca Apollo people) ─────────────────
 const PORTARIA_KEYWORDS: Record<string, string[]> = {
-  "145": ["auto parts", "automotive components", "autopeças", "componentes automotivos"],
-  "384": ["medical devices", "electromedical", "equipamentos médicos", "vigilância sanitária", "healthcare equipment"],
-  "501": ["automotive wheels", "rodas automotivas", "wheel manufacturer"],
-  "071": [],
+  "145": ["automotive", "auto parts", "autopeças", "componentes automotivos", "vehicle parts"],
+  "384": ["medical devices", "electromedical", "equipamentos médicos", "vigilância sanitária"],
+  "501": ["automotive wheels", "rodas automotivas", "wheel manufacturer", "rims"],
+  "071": ["manufacturing", "fabricação industrial", "industrial products"],
 };
 
-// Fontes para inferir cargos de decisores OCP
+// CNAEs BrasilAPI por portaria (4 dígitos)
+const PORTARIA_CNAES_BRASIL: Record<string, string[]> = {
+  "145": ["2910", "2920", "2930", "2941", "2942"],
+  "384": ["3250", "2660", "3841", "3842"],
+  "501": ["2941", "2942", "2949"],
+  "071": ["2800", "2810", "2820"],
+};
+
+// Títulos-alvo para decisores OCP
 const TARGET_TITLES = [
-  "Quality Director", "Diretor de Qualidade", "Gerente de Qualidade",
-  "Regulatory Affairs", "Assuntos Regulatórios", "Diretor Regulatório",
-  "Diretor Industrial", "Compliance Manager", "Certification Manager",
+  "Diretor de Qualidade",
+  "Quality Director",
+  "Gerente de Qualidade",
+  "Quality Manager",
+  "Regulatory Affairs",
+  "Assuntos Regulatórios",
+  "Compliance Manager",
+  "Certification Manager",
+  "Diretor Industrial",
 ];
 
-async function apolloOrgSearch(
+// ── Apollo People Search (endpoint disponível no plano free) ───────────────
+async function apolloPeopleSearch(
   apolloKey: string,
-  keywords: string[],
+  portariaNumero: string,
   comando: string,
-  perPage: number,
+  uf?: string,
 ): Promise<any[]> {
-  const q_keywords = [...keywords, comando].filter(Boolean).join(" ");
-  const body = {
-    q_organization_keyword_tags: q_keywords ? [q_keywords] : undefined,
-    organization_locations: ["Brazil"],
+  const keywords = PORTARIA_KEYWORDS[portariaNumero] || ["manufacturing", "industrial"];
+  const body: Record<string, unknown> = {
+    person_titles: TARGET_TITLES.slice(0, 4),
+    person_locations: uf ? [`${uf}, Brazil`] : ["Brazil"],
     page: 1,
-    per_page: perPage,
+    per_page: 15,
   };
-  const res = await fetch("https://api.apollo.io/api/v1/mixed_companies/search", {
+
+  // q_keywords melhora relevância mas não é obrigatório
+  const qkw = [...keywords.slice(0, 2), comando.slice(0, 80)].join(" ");
+  if (qkw.trim()) body.q_keywords = qkw;
+
+  const res = await fetch("https://api.apollo.io/v1/people/search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -82,28 +102,71 @@ async function apolloOrgSearch(
     },
     body: JSON.stringify(body),
   });
+
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Apollo orgs ${res.status}: ${txt.slice(0, 200)}`);
+    throw new Error(`Apollo people/search ${res.status}: ${txt.slice(0, 300)}`);
   }
+
   const data = await res.json();
-  return data.organizations || data.accounts || [];
+  return data.people || [];
 }
 
+// Converte lista de pessoas Apollo → orgs sintéticas agrupadas por empresa
+function peopleToOrgs(people: any[]): any[] {
+  const map = new Map<string, any>();
+  for (const p of people) {
+    const org = p.organization || {};
+    const key = org.name || p.organization_name || "Desconhecida";
+    if (!map.has(key)) {
+      map.set(key, {
+        name: key,
+        primary_domain: org.primary_domain || org.website_url?.replace(/^https?:\/\//, "").split("/")[0] || "",
+        city: org.city || p.city || "",
+        state: org.state || p.state || "",
+        estimated_num_employees: org.estimated_num_employees,
+        _contacts: [],
+      });
+    }
+    map.get(key)._contacts.push(p);
+  }
+  return Array.from(map.values());
+}
+
+// ── BrasilAPI fallback por CNAE ────────────────────────────────────────────
+async function brasilApiByCnae(cnae: string): Promise<any[]> {
+  try {
+    // BrasilAPI não tem busca por CNAE diretamente — usar CNPJ.ws
+    const res = await fetch(
+      `https://www.receitaws.com.br/v1/cnpj/search?cnae=${cnae}&limit=5`,
+      { signal: AbortSignal.timeout(6000) }
+    );
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+// ── Hunter.io domain search ────────────────────────────────────────────────
 async function hunterDomainSearch(
   hunterKey: string,
   domain: string,
-): Promise<{ emails: any[]; org?: string }> {
-  const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${hunterKey}&limit=10`;
-  const res = await fetch(url);
-  if (!res.ok) return { emails: [] };
-  const data = await res.json();
-  return { emails: data.data?.emails || [], org: data.data?.organization };
+): Promise<{ emails: any[] }> {
+  try {
+    const url = `https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&api_key=${hunterKey}&limit=8`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    if (!res.ok) return { emails: [] };
+    const data = await res.json();
+    return { emails: data.data?.emails || [] };
+  } catch {
+    return { emails: [] };
+  }
 }
 
-function pickDecisores(emails: any[], orgDomain: string): Decisor[] {
+function pickDecisores(emails: any[]): Decisor[] {
   if (!emails?.length) return [];
-  // priorizar cargos-alvo
   const scored = emails
     .map((e: any) => {
       const pos = (e.position || "").toLowerCase();
@@ -124,6 +187,81 @@ function pickDecisores(emails: any[], orgDomain: string): Decisor[] {
   }));
 }
 
+// ── Constrói decisores a partir de contatos Apollo ────────────────────────
+function contactsToDecisores(contacts: any[]): Decisor[] {
+  return contacts.slice(0, 3).map((p: any) => ({
+    nome: [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || "—",
+    cargo: p.title || p.headline || undefined,
+    email: p.email || undefined,
+    telefone: p.phone_numbers?.[0]?.sanitized_number || undefined,
+  }));
+}
+
+// ── Enriquece org com Hunter ────────────────────────────────────────────────
+async function enrichOrg(
+  org: any,
+  hunterKey: string | undefined,
+  portaria: PortariaInput,
+): Promise<OutLead> {
+  const domain = org.primary_domain;
+  let decisores: Decisor[] = [];
+
+  // Primeiro tenta contatos já vindos do Apollo
+  if (org._contacts?.length) {
+    decisores = contactsToDecisores(org._contacts);
+  }
+
+  // Enriquece com Hunter se disponível e domínio conhecido
+  if (hunterKey && domain && decisores.filter((d) => d.email).length === 0) {
+    const { emails } = await hunterDomainSearch(hunterKey, domain);
+    const hunterDecisores = pickDecisores(emails);
+    if (hunterDecisores.length) decisores = hunterDecisores;
+  }
+
+  const primaryContact = decisores[0];
+  const employeeBand = org.estimated_num_employees ? `~${org.estimated_num_employees} func.` : "";
+
+  const score =
+    2 + // base
+    (decisores.length ? 3 : 0) +
+    (domain ? 1 : 0) +
+    (primaryContact?.email ? 2 : 0) +
+    (employeeBand ? 1 : 0) +
+    (portaria.cnaes.length ? 1 : 0);
+
+  const motivo =
+    `Empresa no escopo da ${portaria.label} (${portaria.desc}). ` +
+    (decisores.length
+      ? `${decisores.length} decisor(es) identificado(s) para abordagem direta. `
+      : "Requer prospecção manual para mapear decisores. ") +
+    (employeeBand ? `Porte: ${employeeBand}. ` : "") +
+    `Oportunidade de captação como cliente OCP Scitec.`;
+
+  return {
+    id: crypto.randomUUID(),
+    empresa: org.name || domain || "—",
+    cnpj: null,
+    cidade: org.city || "",
+    uf: org.state || "",
+    cnae: portaria.cnaes[0] || undefined,
+    contato: primaryContact?.nome || null,
+    email: primaryContact?.email || null,
+    telefone: primaryContact?.telefone || null,
+    motivo,
+    score: Math.min(10, score),
+    portaria: portaria.value,
+    certStatus: "desconhecido",
+    diasVencimento: null,
+    ocp_atual: null,
+    deep: {
+      decisores,
+      ocp_concorrente: null,
+      certs_inmetro_estimado: 0,
+    },
+  };
+}
+
+// ── Main handler ───────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -135,127 +273,117 @@ Deno.serve(async (req) => {
     };
 
     if (!portaria?.value || !comando) {
-      return new Response(JSON.stringify({ error: "Parâmetros 'portaria' e 'comando' obrigatórios." }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Parâmetros 'portaria' e 'comando' obrigatórios." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const APOLLO_API_KEY = Deno.env.get("APOLLO_API_KEY");
     const HUNTER_API_KEY = Deno.env.get("HUNTER_API_KEY");
-    if (!APOLLO_API_KEY) {
-      return new Response(JSON.stringify({ error: "APOLLO_API_KEY não configurada.", fallback: true, leads: [] }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!HUNTER_API_KEY) {
-      return new Response(JSON.stringify({ error: "HUNTER_API_KEY não configurada.", fallback: true, leads: [] }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
 
-    const keywords = PORTARIA_KEYWORDS[portaria.numero] || [];
     const stages: string[] = [];
+    stages.push(`🎯 Escopo: ${portaria.label} — ${portaria.desc}`);
 
-    // ── Fase 1 — Apollo: empresas dentro do escopo da portaria
-    stages.push(`Buscando empresas no Apollo (${portaria.desc})...`);
+    // ── Fase 1: Apollo people/search (plano free compatível) ──────────────
     let orgs: any[] = [];
-    try {
-      orgs = await apolloOrgSearch(APOLLO_API_KEY, keywords, comando, 15);
-    } catch (e) {
-      console.error("Apollo erro:", e);
-      return new Response(JSON.stringify({
-        error: (e as Error).message,
-        fallback: true,
-        leads: [],
-        stages,
-      }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-    stages.push(`${orgs.length} empresas encontradas — enriquecendo decisores...`);
 
-    if (uf) {
-      const ufLower = uf.toLowerCase();
-      orgs = orgs.filter((o) => (o.state || "").toLowerCase().includes(ufLower) || (o.raw_address || "").toLowerCase().includes(ufLower));
-    }
+    if (!APOLLO_API_KEY) {
+      stages.push("⚠️ APOLLO_API_KEY não configurada — pulando Apollo");
+    } else {
+      stages.push("🌐 Buscando decisores no Apollo (people/search)...");
+      try {
+        const people = await apolloPeopleSearch(APOLLO_API_KEY, portaria.numero, comando, uf);
+        orgs = peopleToOrgs(people);
+        stages.push(`${orgs.length} empresa(s) identificadas via Apollo people`);
+      } catch (e) {
+        const msg = (e as Error).message;
+        console.error("Apollo erro:", msg);
+        stages.push(`⚠️ Apollo indisponível: ${msg.slice(0, 120)}`);
 
-    // ── Fase 2 — Hunter: e-mails verificados de decisores por domínio
-    stages.push(`Validando e-mails de decisores no Hunter...`);
-    const leadsRaw: OutLead[] = [];
+        // ── Fallback: BrasilAPI por CNAE ───────────────────────────────
+        stages.push("🔄 Tentando BrasilAPI como fallback...");
+        const cnaes = PORTARIA_CNAES_BRASIL[portaria.numero] || [];
+        if (cnaes.length > 0) {
+          const results = await brasilApiByCnae(cnaes[0]);
+          for (const r of results.slice(0, 8)) {
+            orgs.push({
+              name: r.razao_social || r.nome || "—",
+              primary_domain: "",
+              city: r.municipio || r.logradouro_municipio || "",
+              state: r.uf || "",
+              estimated_num_employees: undefined,
+              _contacts: [],
+              _cnpj: (r.cnpj || "").replace(/\D/g, ""),
+            });
+          }
+          stages.push(`${orgs.length} empresa(s) via BrasilAPI fallback`);
+        }
 
-    // limita a 10 enrichments concorrentes
-    const enrich = async (org: any): Promise<OutLead | null> => {
-      const domain = org.primary_domain || org.website_url?.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-      let decisores: Decisor[] = [];
-      if (domain && HUNTER_API_KEY) {
-        try {
-          const { emails } = await hunterDomainSearch(HUNTER_API_KEY, domain);
-          decisores = pickDecisores(emails, domain);
-        } catch (e) {
-          console.warn("Hunter fail", domain, e);
+        if (!orgs.length) {
+          return new Response(
+            JSON.stringify({
+              error: `Apollo indisponível (${msg.slice(0, 150)}) e sem resultados no fallback.`,
+              fallback: true,
+              leads: [],
+              stages,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
         }
       }
+    }
 
-      const primaryContact = decisores[0];
-      const cidade = org.city || "";
-      const ufOrg = org.state || "";
-      const employeeBand = org.estimated_num_employees ? `~${org.estimated_num_employees} func.` : "";
+    if (!orgs.length) {
+      return new Response(
+        JSON.stringify({
+          error: "Nenhuma empresa encontrada para este escopo. Tente um comando diferente.",
+          fallback: true,
+          leads: [],
+          stages,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-      const score =
-        2 + // base
-        (decisores.length ? 3 : 0) +
-        (domain ? 2 : 0) +
-        (employeeBand ? 1 : 0) +
-        (keywords.length ? 2 : 0);
-
-      const motivo =
-        `Fabricante no escopo da ${portaria.label} (${portaria.desc}). ` +
-        (decisores.length ? `${decisores.length} decisor(es) regulatórios identificados via Hunter. ` : "Sem decisores indexados — requer prospecção manual. ") +
-        (employeeBand ? `Porte: ${employeeBand}. ` : "") +
-        `Abordagem AGORA para captura como OCP Scitec.`;
-
-      return {
-        id: crypto.randomUUID(),
-        empresa: org.name || domain || "—",
-        cnpj: null,
-        cidade,
-        uf: ufOrg,
-        cnae: portaria.cnaes[0] || undefined,
-        contato: primaryContact?.nome || null,
-        email: primaryContact?.email || null,
-        telefone: primaryContact?.telefone || null,
-        motivo,
-        score: Math.min(10, score),
-        portaria: portaria.value,
-        certStatus: "desconhecido",
-        diasVencimento: null,
-        ocp_atual: null,
-        deep: {
-          decisores,
-          ocp_concorrente: null,
-          certs_inmetro_estimado: 0,
-        },
-      };
-    };
+    // ── Fase 2: Enriquecer com Hunter (se disponível) ─────────────────────
+    if (HUNTER_API_KEY) {
+      stages.push(`Validando e-mails de decisores no Hunter...`);
+    }
 
     const top = orgs.slice(0, 12);
-    const enriched = await Promise.all(top.map(enrich));
-    for (const l of enriched) if (l) leadsRaw.push(l);
+    const enriched = await Promise.all(
+      top.map((org) => enrichOrg(org, HUNTER_API_KEY, portaria))
+    );
 
-    stages.push(`${leadsRaw.length} leads prontos.`);
+    // Injeta CNPJ do fallback BrasilAPI quando disponível
+    for (let i = 0; i < enriched.length; i++) {
+      if (top[i]._cnpj) enriched[i].cnpj = top[i]._cnpj;
+    }
 
-    return new Response(JSON.stringify({
-      leads: leadsRaw.sort((a, b) => b.score - a.score),
-      analise: `${leadsRaw.length} empresas reais retornadas (Apollo + Hunter) no escopo da ${portaria.label}.`,
-      stages,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  } catch (e) {
-    console.error("hunt-leads-ocp fatal:", e);
-    return new Response(JSON.stringify({
-      error: (e as Error).message || "Erro inesperado",
-      fallback: true,
-      leads: [],
-    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const leads = enriched
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score);
+
+    stages.push(`✅ ${leads.length} leads prontos`);
+
+    return new Response(
+      JSON.stringify({
+        leads,
+        analise: `${leads.length} empresa(s) mapeadas (Apollo people/search + Hunter) — ${portaria.label}.`,
+        stages,
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err: any) {
+    console.error("hunt-leads-ocp fatal:", err);
+    return new Response(
+      JSON.stringify({
+        error: err.message || "Erro inesperado",
+        fallback: true,
+        leads: [],
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
